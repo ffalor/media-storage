@@ -1,5 +1,5 @@
 import { artwork, bytesParts, episodeCode, exactBytes, fmtBitrate, fmtBytes, fmtDate, fmtDuration, fmtInt, fmtRelative, h, icon, resolutionLabel, sizeBlock, } from "./dom.js";
-import { saveTopCount, TOP_COUNTS } from "./store.js";
+import { saveTopCount, TOP_COUNT_MAX, TOP_COUNTS } from "./store.js";
 export const PAGE_ID = "media-storage";
 const positive = (value) => {
     const n = Number(value);
@@ -235,19 +235,66 @@ export class MediaStorageApp {
             features.append(this.featureCard("Largest movie", data.movies.largest, { view: "movie", movieId: data.movies.largest.id }, data.movies.sizeBytes, "movie"));
         if (features.childElementCount)
             view.append(features);
-        const prefs = this.store.prefs;
-        const count = h("select", { class: "ms-select__input", "aria-label": "Number of top items" }, ...TOP_COUNTS.map((n) => h("option", { value: String(n) }, `Top ${n}`)));
-        count.value = String(prefs.topCount);
         const ranks = h("div", { class: "ms-ranks" });
-        const drawRanks = () => ranks.replaceChildren(this.rankList("Top series", data.tv, "tv"), this.rankList("Top movies", data.movies, "movie"));
-        count.addEventListener("change", () => {
-            prefs.topCount = Number(count.value);
-            saveTopCount(prefs.topCount);
-            drawRanks();
-        });
+        const drawRanks = () => ranks.replaceChildren(this.rankList("Top series", data.tv, "tv"), this.rankList("Top movies", data.movies, "movie", control));
+        const control = this.topCountControl(drawRanks);
         drawRanks();
-        view.append(h("div", { class: "ms-ranks__bar" }, h("label", { class: "ms-select" }, h("span", { class: "ms-visually-hidden" }, "Show"), count, icon("chevronDown", "ms-icon ms-select__chev"))), ranks);
+        view.append(ranks);
         return view;
+    }
+    /** "Top N" picker: presets plus a custom count. Shared by both lists and saved in the browser. */
+    topCountControl(onChange) {
+        const prefs = this.store.prefs;
+        const isPreset = (n) => TOP_COUNTS.includes(n);
+        const select = h("select", { class: "ms-select__input ms-select__input--sm", "aria-label": "Number of top items" }, ...TOP_COUNTS.map((n) => h("option", { value: String(n) }, `Top ${n}`)), h("option", { value: "custom" }, "Custom…"));
+        const input = h("input", { class: "ms-count__input", type: "number", min: "1", max: String(TOP_COUNT_MAX), step: "1", inputmode: "numeric", "aria-label": "Number of top items" });
+        const sync = () => {
+            const custom = !isPreset(prefs.topCount);
+            select.value = custom ? "custom" : String(prefs.topCount);
+            input.value = String(prefs.topCount);
+            input.hidden = !custom;
+        };
+        const set = (n) => {
+            prefs.topCount = n;
+            saveTopCount(n);
+            sync();
+            onChange();
+        };
+        select.addEventListener("change", () => {
+            if (select.value !== "custom")
+                return set(Number(select.value));
+            input.hidden = false;
+            input.value = String(Math.max(prefs.topCount, 50));
+            input.focus();
+            input.select();
+        });
+        const commit = () => {
+            const n = Math.round(Number(input.value));
+            if (Number.isFinite(n) && n >= 1)
+                set(Math.min(n, TOP_COUNT_MAX));
+            else
+                sync();
+        };
+        input.addEventListener("change", commit);
+        input.addEventListener("keydown", (event) => {
+            if (event.key === "Enter")
+                commit();
+        });
+        sync();
+        return h("div", { class: "ms-count" }, h("label", { class: "ms-select" }, select, icon("chevronDown", "ms-icon ms-select__chev")), input);
+    }
+    /** The largest items for a list: the overview's own top items, or the loaded library when more are asked for. */
+    topItems(totals, kind) {
+        const n = this.store.prefs.topCount;
+        const res = kind === "tv" ? this.store.series : this.store.movies;
+        const library = "data" in res ? res.data : undefined;
+        if (n <= totals.top.length || !library)
+            return totals.top.slice(0, n);
+        return [...library]
+            .filter((item) => item.sizeBytes > 0)
+            .sort((a, b) => b.sizeBytes - a.sizeBytes)
+            .slice(0, n)
+            .map((item) => ({ id: item.id, title: item.title, year: item.year, sizeBytes: item.sizeBytes, poster: item.poster }));
     }
     overviewHero(data) {
         const total = bytesParts(data.combinedBytes);
@@ -274,13 +321,13 @@ export class MediaStorageApp {
         const share = total ? item.sizeBytes / total : 0;
         return this.link(route, { class: `ms-feature is-${kind}`, "aria-label": `${eyebrow}: ${item.title}, ${fmtBytes(item.sizeBytes)}` }, artwork(item.backdrop ?? item.poster, "", "ms-feature__backdrop", { eager: true, fallback: "" }), h("span", { class: "ms-feature__scrim", "aria-hidden": "true" }), h("span", { class: "ms-feature__content" }, artwork(item.poster, item.title, "ms-feature__poster", { eager: true }), h("span", { class: "ms-feature__text" }, h("span", { class: "ms-eyebrow" }, eyebrow), h("span", { class: "ms-feature__title" }, item.title), h("span", { class: "ms-feature__meta" }, sizeBlock(item.sizeBytes, "ms-size ms-size--lg"), h("span", { class: "ms-feature__share" }, `${(share * 100).toFixed(1)}% of ${kind === "tv" ? "TV" : "movies"}`)))));
     }
-    rankList(title, totals, kind) {
-        const wrap = h("section", { class: "ms-rank" }, h("h3", { class: "ms-h3" }, title));
+    rankList(title, totals, kind, control) {
+        const wrap = h("section", { class: "ms-rank" }, h("div", { class: "ms-rank__head" }, h("h3", { class: "ms-h3" }, title), control ?? null));
         if (totals.status.state === "error" && totals.status.error) {
             wrap.append(this.errorState(totals.status.error, () => void this.store.load(true), true));
             return wrap;
         }
-        const top = totals.top.slice(0, this.store.prefs.topCount);
+        const top = this.topItems(totals, kind);
         const list = h("ol", { class: "ms-rank__list" });
         top.forEach((item, index) => {
             const route = kind === "tv" ? { view: "series", seriesId: item.id } : { view: "movie", movieId: item.id };

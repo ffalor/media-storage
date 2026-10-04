@@ -184,10 +184,11 @@ export class Store {
 }
 const TOP_COUNT_KEY = "media-storage.topCount";
 export const TOP_COUNTS = [5, 10, 15, 25];
+export const TOP_COUNT_MAX = 1000;
 function readTopCount() {
     try {
         const saved = Number(localStorage.getItem(TOP_COUNT_KEY));
-        if (TOP_COUNTS.includes(saved))
+        if (Number.isInteger(saved) && saved >= 1 && saved <= TOP_COUNT_MAX)
             return saved;
     }
     catch {
