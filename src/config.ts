@@ -1,10 +1,9 @@
 /**
  * Plugin config (`plugins.entries.media-storage.config`).
  *
- * `apiKey` fields are declared as `configContracts.secretInputs` in the manifest, so they
- * should hold a SecretRef (for example `{ source: "store", provider: "default", id: "SONARR_API_KEY" }`).
- * The Gateway resolves the ref at runtime and redacts it in Settings; the plugin only ever
- * receives the resolved string in `api.pluginConfig`.
+ * `apiKey` fields are declared as `configContracts.secretInputs` in the manifest and must hold a
+ * SecretRef (for example `{ source: "store", provider: "default", id: "SONARR_API_KEY" }`). The
+ * plugin reads the resolved key per request with `getPreparedPluginSecretInput` and never keeps it.
  */
 
 const secretRef = {
@@ -18,16 +17,15 @@ const secretRef = {
   },
 } as const;
 
-const service = (name: string, defaultUrl: string, defaultSecretId: string) =>
+const service = (name: string, defaultUrl: string) =>
   ({
     type: "object",
     additionalProperties: false,
     properties: {
       url: { type: "string", default: defaultUrl, description: `${name} base URL.` },
       apiKey: {
-        description: `${name} API key as a SecretRef (recommended: a protected entry in Settings → Secrets).`,
-        anyOf: [{ type: "string", minLength: 1, maxLength: 512 }, secretRef],
-        default: { source: "store", provider: "default", id: defaultSecretId },
+        description: `${name} API key as a SecretRef (for example a protected entry in Settings → Secrets).`,
+        ...secretRef,
       },
     },
   }) as const;
@@ -39,12 +37,10 @@ export const CONFIG_JSON_SCHEMA = {
   type: "object",
   additionalProperties: false,
   properties: {
-    sonarr: service("Sonarr", DEFAULT_SONARR_URL, "SONARR_API_KEY"),
-    radarr: service("Radarr", DEFAULT_RADARR_URL, "RADARR_API_KEY"),
+    sonarr: service("Sonarr", DEFAULT_SONARR_URL),
+    radarr: service("Radarr", DEFAULT_RADARR_URL),
   },
 };
-
-export type ResolvedService = { url: string; apiKey: string | undefined };
 
 function httpUrl(value: unknown, fallback: string) {
   if (typeof value !== "string" || !value.trim()) return fallback;
@@ -56,10 +52,9 @@ function httpUrl(value: unknown, fallback: string) {
   }
 }
 
-/** Read resolved config. Unresolved SecretRef objects are treated as missing, never as keys. */
-export function resolveService(config: Record<string, unknown> | undefined, name: "sonarr" | "radarr"): ResolvedService {
+/** Read the service URL from plugin config. API keys are not read here; see `getPreparedPluginSecretInput`. */
+export function resolveServiceUrl(config: Record<string, unknown> | undefined, name: "sonarr" | "radarr"): string {
   const section = config?.[name];
   const record = section && typeof section === "object" ? (section as Record<string, unknown>) : {};
-  const apiKey = typeof record.apiKey === "string" && record.apiKey.trim() ? record.apiKey.trim() : undefined;
-  return { url: httpUrl(record.url, name === "sonarr" ? DEFAULT_SONARR_URL : DEFAULT_RADARR_URL), apiKey };
+  return httpUrl(record.url, name === "sonarr" ? DEFAULT_SONARR_URL : DEFAULT_RADARR_URL);
 }

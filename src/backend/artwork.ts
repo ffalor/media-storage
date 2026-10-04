@@ -1,4 +1,4 @@
-import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { ArrClient } from "./arr.js";
 
@@ -33,14 +33,9 @@ export class Artwork {
   private cacheBytes = 0;
   private readonly inflight = new Map<string, Promise<Image | null>>();
 
-  constructor(
-    private readonly clients: { sonarr: ArrClient; radarr: ArrClient },
-    keys: readonly (string | undefined)[],
-  ) {
-    this.secret = createHash("sha256")
-      .update("openclaw/media-storage/artwork/v1\0")
-      .update(keys.map((key) => key ?? "").join("\0"))
-      .digest();
+  // Random per-instance signing key, so artwork URLs never depend on (or reveal) the API keys.
+  constructor(private readonly clients: { sonarr: ArrClient; radarr: ArrClient }) {
+    this.secret = randomBytes(32);
   }
 
   private sign(payload: string) {

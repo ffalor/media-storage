@@ -2,22 +2,25 @@ import { defineFeaturePlugin } from "openclaw/plugin-sdk/feature-plugin";
 import { buildJsonPluginConfigSchema } from "openclaw/plugin-sdk/plugin-entry";
 import { getToolPluginMetadata, toolPluginMetadataSymbol } from "openclaw/plugin-sdk/tool-plugin";
 import { contract, LIBRARY_PAGE } from "./contract.js";
-import { CONFIG_JSON_SCHEMA, resolveService } from "./config.js";
+import { getPreparedPluginSecretInput } from "openclaw/plugin-sdk/secret-input-runtime";
+import { CONFIG_JSON_SCHEMA, resolveServiceUrl } from "./config.js";
 import { createArrClient } from "./backend/arr.js";
 import { ART_ROUTE, Artwork } from "./backend/artwork.js";
 import { createMediaService } from "./backend/service.js";
+
+const PLUGIN_ID = "media-storage";
 
 const entry = defineFeaturePlugin({
   contract,
   name: "Media Storage",
   description: "Read-only storage analysis for Sonarr and Radarr libraries with a native Control UI page.",
   setup(api, events) {
-    // apiKey values arrive already resolved from their SecretRefs; they never enter logs or responses.
-    const sonarrConfig = resolveService(api.pluginConfig, "sonarr");
-    const radarrConfig = resolveService(api.pluginConfig, "radarr");
-    const sonarr = createArrClient("sonarr", sonarrConfig.url, sonarrConfig.apiKey);
-    const radarr = createArrClient("radarr", radarrConfig.url, radarrConfig.apiKey);
-    const art = new Artwork({ sonarr, radarr }, [sonarrConfig.apiKey, radarrConfig.apiKey]);
+    // API keys are read from the prepared secrets snapshot on every request and never retained,
+    // so a reload or failed secret makes them unavailable immediately. They never enter logs or responses.
+    const apiKey = (service: "sonarr" | "radarr") => () => getPreparedPluginSecretInput(PLUGIN_ID, `${service}.apiKey`).value;
+    const sonarr = createArrClient("sonarr", resolveServiceUrl(api.pluginConfig, "sonarr"), apiKey("sonarr"));
+    const radarr = createArrClient("radarr", resolveServiceUrl(api.pluginConfig, "radarr"), apiKey("radarr"));
+    const art = new Artwork({ sonarr, radarr });
     const media = createMediaService({
       sonarr,
       radarr,
@@ -31,9 +34,6 @@ const entry = defineFeaturePlugin({
         }
       },
     });
-
-    if (!sonarrConfig.apiKey) api.logger.warn("media-storage: sonarr.apiKey is not configured; TV data will be unavailable.");
-    if (!radarrConfig.apiKey) api.logger.warn("media-storage: radarr.apiKey is not configured; movie data will be unavailable.");
 
     // Build both library snapshots as soon as the Gateway starts so the first view is instant.
     api.registerService({

@@ -20,10 +20,12 @@ export function toServiceError(service, error) {
     return { service, code: "upstream_error", message: `${label(service)} request failed unexpectedly.` };
 }
 export const label = (service) => (service === "sonarr" ? "Sonarr" : "Radarr");
-export function createArrClient(service, baseUrl, apiKey) {
+/** `getApiKey` is called per request so the key is never retained beyond the current invocation. */
+export function createArrClient(service, baseUrl, getApiKey) {
     const base = new URL(baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`);
     const name = label(service);
     const request = async (path, timeoutMs, accept) => {
+        const apiKey = getApiKey();
         if (!apiKey) {
             throw new ArrError(service, "not_configured", `${name} is not configured: set plugins.entries.media-storage.config.${service}.apiKey to a SecretRef.`);
         }
@@ -52,7 +54,9 @@ export function createArrClient(service, baseUrl, apiKey) {
     };
     return {
         service,
-        configured: Boolean(apiKey),
+        get configured() {
+            return Boolean(getApiKey());
+        },
         async json(path, options = {}) {
             const response = await request(`api/v3${path}`, options.timeoutMs ?? 20_000, "application/json");
             if (!response.ok) {

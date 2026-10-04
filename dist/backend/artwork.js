@@ -1,4 +1,4 @@
-import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 /**
  * Artwork delivery.
  *
@@ -22,12 +22,10 @@ export class Artwork {
     cache = new Map();
     cacheBytes = 0;
     inflight = new Map();
-    constructor(clients, keys) {
+    // Random per-instance signing key, so artwork URLs never depend on (or reveal) the API keys.
+    constructor(clients) {
         this.clients = clients;
-        this.secret = createHash("sha256")
-            .update("openclaw/media-storage/artwork/v1\0")
-            .update(keys.map((key) => key ?? "").join("\0"))
-            .digest();
+        this.secret = randomBytes(32);
     }
     sign(payload) {
         return createHmac("sha256", this.secret).update(payload).digest().subarray(0, 18).toString("base64url");

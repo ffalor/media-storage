@@ -1,6 +1,6 @@
 {
   "name": "openclaw-plugin-media-storage",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "private": true,
   "description": "Read-only Sonarr/Radarr storage analysis with a native OpenClaw Control UI page.",

@@ -33,11 +33,13 @@ export type ArrClient = {
   raw: (path: string, options?: { timeoutMs?: number }) => Promise<Response>;
 };
 
-export function createArrClient(service: ServiceNameT, baseUrl: string, apiKey: string | undefined): ArrClient {
+/** `getApiKey` is called per request so the key is never retained beyond the current invocation. */
+export function createArrClient(service: ServiceNameT, baseUrl: string, getApiKey: () => string | undefined): ArrClient {
   const base = new URL(baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`);
   const name = label(service);
 
   const request = async (path: string, timeoutMs: number, accept: string) => {
+    const apiKey = getApiKey();
     if (!apiKey) {
       throw new ArrError(service, "not_configured", `${name} is not configured: set plugins.entries.media-storage.config.${service}.apiKey to a SecretRef.`);
     }
@@ -69,7 +71,9 @@ export function createArrClient(service: ServiceNameT, baseUrl: string, apiKey: 
 
   return {
     service,
-    configured: Boolean(apiKey),
+    get configured() {
+      return Boolean(getApiKey());
+    },
     async json<T>(path: string, options: { timeoutMs?: number } = {}) {
       const response = await request(`api/v3${path}`, options.timeoutMs ?? 20_000, "application/json");
       if (!response.ok) {

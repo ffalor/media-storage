@@ -2,7 +2,7 @@
   "id": "media-storage",
   "name": "Media Storage",
   "description": "Read-only storage analysis for Sonarr and Radarr libraries with a native Control UI page.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
@@ -17,46 +17,32 @@
             "description": "Sonarr base URL."
           },
           "apiKey": {
-            "description": "Sonarr API key as a SecretRef (recommended: a protected entry in Settings → Secrets).",
-            "anyOf": [
-              {
+            "description": "Sonarr API key as a SecretRef (for example a protected entry in Settings → Secrets).",
+            "type": "object",
+            "required": [
+              "source",
+              "id"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "source": {
+                "type": "string",
+                "enum": [
+                  "env",
+                  "file",
+                  "exec",
+                  "store"
+                ]
+              },
+              "provider": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_-]{0,63}$"
+              },
+              "id": {
                 "type": "string",
                 "minLength": 1,
-                "maxLength": 512
-              },
-              {
-                "type": "object",
-                "required": [
-                  "source",
-                  "id"
-                ],
-                "additionalProperties": false,
-                "properties": {
-                  "source": {
-                    "type": "string",
-                    "enum": [
-                      "env",
-                      "file",
-                      "exec",
-                      "store"
-                    ]
-                  },
-                  "provider": {
-                    "type": "string",
-                    "pattern": "^[a-z][a-z0-9_-]{0,63}$"
-                  },
-                  "id": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 256
-                  }
-                }
+                "maxLength": 256
               }
-            ],
-            "default": {
-              "source": "store",
-              "provider": "default",
-              "id": "SONARR_API_KEY"
             }
           }
         }
@@ -71,46 +57,32 @@
             "description": "Radarr base URL."
           },
           "apiKey": {
-            "description": "Radarr API key as a SecretRef (recommended: a protected entry in Settings → Secrets).",
-            "anyOf": [
-              {
+            "description": "Radarr API key as a SecretRef (for example a protected entry in Settings → Secrets).",
+            "type": "object",
+            "required": [
+              "source",
+              "id"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "source": {
+                "type": "string",
+                "enum": [
+                  "env",
+                  "file",
+                  "exec",
+                  "store"
+                ]
+              },
+              "provider": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_-]{0,63}$"
+              },
+              "id": {
                 "type": "string",
                 "minLength": 1,
-                "maxLength": 512
-              },
-              {
-                "type": "object",
-                "required": [
-                  "source",
-                  "id"
-                ],
-                "additionalProperties": false,
-                "properties": {
-                  "source": {
-                    "type": "string",
-                    "enum": [
-                      "env",
-                      "file",
-                      "exec",
-                      "store"
-                    ]
-                  },
-                  "provider": {
-                    "type": "string",
-                    "pattern": "^[a-z][a-z0-9_-]{0,63}$"
-                  },
-                  "id": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 256
-                  }
-                }
+                "maxLength": 256
               }
-            ],
-            "default": {
-              "source": "store",
-              "provider": "default",
-              "id": "RADARR_API_KEY"
             }
           }
         }
