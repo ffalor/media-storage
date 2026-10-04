@@ -212,6 +212,8 @@ export function createMediaService(deps) {
             }
         }, force);
     }
+    // Sonarr and Radarr route their web pages by titleSlug (Radarr's slug is the TMDB id).
+    const seriesWebUrl = (series) => series.titleSlug ? sonarr.webUrl(`series/${encodeURIComponent(series.titleSlug)}`) : null;
     function seriesBundle(seriesId) {
         return cache.get(`tv:series:${seriesId}`, DETAIL_TTL, async () => {
             const [series, episodes] = await Promise.all([
@@ -382,6 +384,7 @@ export function createMediaService(deps) {
                     seasonCount: seasons.filter((season) => season.seasonNumber > 0).length,
                     poster: art.cover("sonarr", image(series.images, "poster"), "poster-500"),
                     backdrop: art.cover("sonarr", image(series.images, "fanart"), "fanart"),
+                    webUrl: seriesWebUrl(series),
                     seasons,
                 };
             }
@@ -446,6 +449,7 @@ export function createMediaService(deps) {
                     offset,
                     files: files.slice(offset, offset + SEASON_FILES_PAGE),
                     backdrop: art.cover("sonarr", image(bundle.series.images, "fanart"), "fanart"),
+                    webUrl: seriesWebUrl(bundle.series),
                 };
             }
             catch (error) {
@@ -469,6 +473,7 @@ export function createMediaService(deps) {
                     runtimeMinutes: int(movie.runtime),
                     status: str(movie.status, 32) ?? "unknown",
                     hasFile: Boolean(file),
+                    webUrl: movie.titleSlug ? radarr.webUrl(`movie/${encodeURIComponent(movie.titleSlug)}`) : null,
                     sizeBytes: file ? int(file.size) : 0,
                     poster: art.cover("radarr", image(movie.images, "poster"), "poster-500"),
                     backdrop: art.cover("radarr", image(movie.images, "fanart"), "fanart"),

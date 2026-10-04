@@ -54,6 +54,7 @@ export function createArrClient(service, baseUrl, getApiKey) {
     };
     return {
         service,
+        webUrl: (path) => new URL(path, base).toString(),
         get configured() {
             return Boolean(getApiKey());
         },

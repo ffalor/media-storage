@@ -435,6 +435,7 @@ export class MediaStorageApp {
             sizeBytes: data?.sizeBytes ?? summary?.sizeBytes ?? null,
             facts: data ? [[fmtInt(data.seasonCount), data.seasonCount === 1 ? "season" : "seasons"], [fmtInt(data.fileCount), data.fileCount === 1 ? "file" : "files"]] : summary ? [[fmtInt(summary.seasonCount), "seasons"], [fmtInt(summary.fileCount), "files"]] : [],
             overview: data?.overview ?? null,
+            link: data?.webUrl ? { href: data.webUrl, service: "Sonarr" } : null,
             kind: "tv",
         }));
         if (res.status === "error") {
@@ -475,7 +476,7 @@ export class MediaStorageApp {
         const view = h("article", { class: "ms-detail ms-season-view" });
         view.append(this.crumbs(["TV", { view: "tv" }], [seriesTitle, { view: "series", seriesId }], [label, null]));
         const seasonInfo = seriesData?.seasons.find((s) => s.seasonNumber === seasonNumber);
-        const header = h("header", { class: "ms-season-head" }, artwork(seasonInfo?.artwork ?? data?.backdrop ?? seriesData?.backdrop ?? null, "", "ms-season-head__art", { eager: true, fallback: "" }), h("span", { class: "ms-season-head__scrim", "aria-hidden": "true" }), h("div", { class: "ms-season-head__text" }, h("p", { class: "ms-eyebrow" }, seriesTitle), h("h2", { class: "ms-h1", tabindex: "-1", "data-ms-heading": "" }, label), data ? h("p", { class: "ms-season-head__meta" }, sizeBlock(data.sizeBytes, "ms-size ms-size--lg"), h("span", null, `${fmtInt(data.total)} unique ${data.total === 1 ? "file" : "files"}`)) : h("span", { class: "ms-skel ms-skel--line" })));
+        const header = h("header", { class: "ms-season-head" }, artwork(seasonInfo?.artwork ?? data?.backdrop ?? seriesData?.backdrop ?? null, "", "ms-season-head__art", { eager: true, fallback: "" }), h("span", { class: "ms-season-head__scrim", "aria-hidden": "true" }), h("div", { class: "ms-season-head__text" }, h("p", { class: "ms-eyebrow" }, seriesTitle), h("h2", { class: "ms-h1", tabindex: "-1", "data-ms-heading": "" }, label), data ? h("p", { class: "ms-season-head__meta" }, sizeBlock(data.sizeBytes, "ms-size ms-size--lg"), h("span", null, `${fmtInt(data.total)} unique ${data.total === 1 ? "file" : "files"}`)) : h("span", { class: "ms-skel ms-skel--line" }), data?.webUrl ? serviceLink(data.webUrl, "Sonarr") : null));
         view.append(header);
         if (res.status === "error") {
             view.append(this.errorState(res.error, () => void this.store.loadSeason(seriesId, seasonNumber, true)));
@@ -551,6 +552,7 @@ export class MediaStorageApp {
             sizeBytes: data ? (data.hasFile ? data.sizeBytes : null) : (summary?.sizeBytes ?? null),
             facts: spec ? [[resolutionLabel(spec.resolutionClass) ?? spec.resolution ?? "—", spec.quality ?? ""], [spec.videoCodec ?? "—", spec.dynamicRange ?? "video"]] : [],
             overview: data?.overview ?? null,
+            link: data?.webUrl ? { href: data.webUrl, service: "Radarr" } : null,
             kind: "movie",
         }));
         if (res.status === "error") {
@@ -583,7 +585,7 @@ export class MediaStorageApp {
     }
     // ---- Shared ------------------------------------------------------------------------------
     hero(opts) {
-        return h("header", { class: `ms-hero is-${opts.kind}` }, h("div", { class: "ms-hero__backdrop" }, artwork(opts.backdrop, "", "ms-hero__img", { eager: true, fallback: "" }), h("span", { class: "ms-hero__scrim", "aria-hidden": "true" })), h("div", { class: "ms-hero__content" }, artwork(opts.poster, opts.title, "ms-hero__poster", { eager: true }), h("div", { class: "ms-hero__text" }, h("h2", { class: "ms-h1", tabindex: "-1", "data-ms-heading": "" }, opts.title), h("p", { class: "ms-hero__meta" }, opts.meta.filter(Boolean).join(" · ")), h("div", { class: "ms-hero__figures" }, opts.sizeBytes !== null ? sizeBlock(opts.sizeBytes, "ms-size ms-size--xl") : h("span", { class: "ms-skel ms-skel--size" }), ...opts.facts.map(([value, label]) => h("span", { class: "ms-fact" }, h("strong", null, value), label ? ` ${label}` : ""))), opts.overview ? h("p", { class: "ms-hero__overview" }, opts.overview) : null)));
+        return h("header", { class: `ms-hero is-${opts.kind}` }, h("div", { class: "ms-hero__backdrop" }, artwork(opts.backdrop, "", "ms-hero__img", { eager: true, fallback: "" }), h("span", { class: "ms-hero__scrim", "aria-hidden": "true" })), h("div", { class: "ms-hero__content" }, artwork(opts.poster, opts.title, "ms-hero__poster", { eager: true }), h("div", { class: "ms-hero__text" }, h("h2", { class: "ms-h1", tabindex: "-1", "data-ms-heading": "" }, opts.title), h("p", { class: "ms-hero__meta" }, opts.meta.filter(Boolean).join(" · ")), h("div", { class: "ms-hero__figures" }, opts.sizeBytes !== null ? sizeBlock(opts.sizeBytes, "ms-size ms-size--xl") : h("span", { class: "ms-skel ms-skel--size" }), ...opts.facts.map(([value, label]) => h("span", { class: "ms-fact" }, h("strong", null, value), label ? ` ${label}` : ""))), opts.overview ? h("p", { class: "ms-hero__overview" }, opts.overview) : null, opts.link ? serviceLink(opts.link.href, opts.link.service) : null)));
     }
     findSeries(id) {
         const res = this.store.series;
@@ -596,4 +598,8 @@ export class MediaStorageApp {
 }
 function cap(value) {
     return value ? value.charAt(0).toUpperCase() + value.slice(1) : null;
+}
+/** Opens the item's page in the Sonarr/Radarr web UI in a new tab. */
+function serviceLink(href, service) {
+    return h("a", { class: "ms-service-link", href, target: "_blank", rel: "noopener noreferrer", "aria-label": `Open in ${service} (new tab)` }, `Open in ${service}`, icon("external", "ms-icon ms-icon--sm"));
 }

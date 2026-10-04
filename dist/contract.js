@@ -127,6 +127,8 @@ export const SeriesDetail = Type.Object({
     poster: Art,
     backdrop: Art,
     seasons: Type.Array(SeasonSummary, { maxItems: 200 }),
+    /** The series page in the Sonarr web UI. */
+    webUrl: OptText(2048),
 }, { additionalProperties: false });
 export const MediaSpec = Type.Object({
     quality: OptText(64),
@@ -167,6 +169,8 @@ export const SeasonFiles = Type.Object({
     offset: Count,
     files: Type.Array(EpisodeFile, { maxItems: 100 }),
     backdrop: Art,
+    /** The series page in the Sonarr web UI (Sonarr has no per-episode page). */
+    webUrl: OptText(2048),
 }, { additionalProperties: false });
 export const MovieDetail = Type.Object({
     ok: Type.Literal(true),
@@ -181,6 +185,8 @@ export const MovieDetail = Type.Object({
     runtimeMinutes: Count,
     status: Text(32),
     hasFile: Type.Boolean(),
+    /** The movie page in the Radarr web UI. */
+    webUrl: OptText(2048),
     sizeBytes: Bytes,
     poster: Art,
     backdrop: Art,

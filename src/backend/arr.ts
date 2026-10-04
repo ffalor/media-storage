@@ -27,6 +27,8 @@ export const label = (service: ServiceNameT) => (service === "sonarr" ? "Sonarr"
 export type ArrClient = {
   readonly service: ServiceNameT;
   readonly configured: boolean;
+  /** Absolute link to a page in the service's web UI. */
+  webUrl: (path: string) => string;
   /** GET /api/v3{path} as JSON. */
   json: <T>(path: string, options?: { timeoutMs?: number; allowStatus?: number[] }) => Promise<T>;
   /** GET an arbitrary API path and return the raw response (artwork). */
@@ -71,6 +73,7 @@ export function createArrClient(service: ServiceNameT, baseUrl: string, getApiKe
 
   return {
     service,
+    webUrl: (path: string) => new URL(path, base).toString(),
     get configured() {
       return Boolean(getApiKey());
     },

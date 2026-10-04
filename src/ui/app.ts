@@ -626,6 +626,7 @@ export class MediaStorageApp {
         sizeBytes: data?.sizeBytes ?? summary?.sizeBytes ?? null,
         facts: data ? [[fmtInt(data.seasonCount), data.seasonCount === 1 ? "season" : "seasons"], [fmtInt(data.fileCount), data.fileCount === 1 ? "file" : "files"]] : summary ? [[fmtInt(summary.seasonCount), "seasons"], [fmtInt(summary.fileCount), "files"]] : [],
         overview: data?.overview ?? null,
+        link: data?.webUrl ? { href: data.webUrl, service: "Sonarr" } : null,
         kind: "tv",
       }),
     );
@@ -693,6 +694,7 @@ export class MediaStorageApp {
         h("p", { class: "ms-eyebrow" }, seriesTitle),
         h("h2", { class: "ms-h1", tabindex: "-1", "data-ms-heading": "" }, label),
         data ? h("p", { class: "ms-season-head__meta" }, sizeBlock(data.sizeBytes, "ms-size ms-size--lg"), h("span", null, `${fmtInt(data.total)} unique ${data.total === 1 ? "file" : "files"}`)) : h("span", { class: "ms-skel ms-skel--line" }),
+        data?.webUrl ? serviceLink(data.webUrl, "Sonarr") : null,
       ),
     );
     view.append(header);
@@ -782,6 +784,7 @@ export class MediaStorageApp {
         sizeBytes: data ? (data.hasFile ? data.sizeBytes : null) : (summary?.sizeBytes ?? null),
         facts: spec ? ([[resolutionLabel(spec.resolutionClass) ?? spec.resolution ?? "—", spec.quality ?? ""], [spec.videoCodec ?? "—", spec.dynamicRange ?? "video"]] as [string, string][]) : [],
         overview: data?.overview ?? null,
+        link: data?.webUrl ? { href: data.webUrl, service: "Radarr" } : null,
         kind: "movie",
       }),
     );
@@ -860,6 +863,7 @@ export class MediaStorageApp {
     sizeBytes: number | null;
     facts: [string, string][];
     overview: string | null;
+    link: { href: string; service: string } | null;
     kind: "tv" | "movie";
   }) {
     return h(
@@ -882,6 +886,7 @@ export class MediaStorageApp {
             ...opts.facts.map(([value, label]) => h("span", { class: "ms-fact" }, h("strong", null, value), label ? ` ${label}` : "")),
           ),
           opts.overview ? h("p", { class: "ms-hero__overview" }, opts.overview) : null,
+          opts.link ? serviceLink(opts.link.href, opts.link.service) : null,
         ),
       ),
     );
@@ -900,4 +905,14 @@ export class MediaStorageApp {
 
 function cap(value: string | null) {
   return value ? value.charAt(0).toUpperCase() + value.slice(1) : null;
+}
+
+/** Opens the item's page in the Sonarr/Radarr web UI in a new tab. */
+function serviceLink(href: string, service: string) {
+  return h(
+    "a",
+    { class: "ms-service-link", href, target: "_blank", rel: "noopener noreferrer", "aria-label": `Open in ${service} (new tab)` },
+    `Open in ${service}`,
+    icon("external", "ms-icon ms-icon--sm"),
+  );
 }

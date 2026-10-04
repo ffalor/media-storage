@@ -2,7 +2,7 @@
   "id": "media-storage",
   "name": "Media Storage",
   "description": "Read-only storage analysis for Sonarr and Radarr libraries with a native Control UI page.",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
@@ -125,9 +125,9 @@
     "navigation"
   ],
   "controlUi": {
-    "entry": "dist/control-ui/dffc25fe388e66c9c17bebfe7358735e2163fe0499d93476f0fa4ecdebab9754/index.js",
+    "entry": "dist/control-ui/66d20c4aeb8e62f1fa56cb85f8af2ab64339fa81148c5a2ce47a2b864f8dccdc/index.js",
     "styles": [
-      "dist/control-ui/dffc25fe388e66c9c17bebfe7358735e2163fe0499d93476f0fa4ecdebab9754/index.css"
+      "dist/control-ui/66d20c4aeb8e62f1fa56cb85f8af2ab64339fa81148c5a2ce47a2b864f8dccdc/index.css"
     ]
   },
   "configContracts": {
