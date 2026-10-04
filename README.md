@@ -56,12 +56,18 @@ Config lives under `plugins.entries.media-storage.config`.
 
 The API keys are declared as `configContracts.secretInputs`, so the config holds only a reference to the secret,
 and Settings redacts it. Store each key as a **protected** entry in Settings → Secrets (or let your agent's
-`secrets` tool prompt you for it), with no allowed hosts. Name them `SONARR_API_KEY` and `RADARR_API_KEY` and
-no config change is needed; just set the URLs if they aren't the defaults:
+`secrets` tool prompt you for it), with no allowed hosts. Name them `SONARR_API_KEY` and `RADARR_API_KEY` to use
+the default references, then set the URLs if they aren't the defaults:
 
 ```sh
 openclaw config set plugins.entries.media-storage.config.sonarr.url http://sonarr.local:8989/
 openclaw config set plugins.entries.media-storage.config.radarr.url http://radarr.local:7878/
+```
+
+`plugins.entries.*` changes hot-reload the plugin and re-resolve its secrets, so no reload or restart is needed.
+If you create or change a secret without changing config, apply it with:
+
+```sh
 openclaw secrets reload
 ```
 
@@ -70,10 +76,7 @@ If your secrets use different names, point the config at them:
 ```sh
 openclaw config set plugins.entries.media-storage.config.sonarr.apiKey --ref-source store --ref-provider default --ref-id MY_SONARR_KEY
 openclaw config set plugins.entries.media-storage.config.radarr.apiKey --ref-source store --ref-provider default --ref-id MY_RADARR_KEY
-openclaw secrets reload
 ```
-
-Restart the Gateway if the plugin still logs `apiKey is not configured` after setting the references.
 
 ## How data is refreshed
 
