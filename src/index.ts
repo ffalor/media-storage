@@ -3,7 +3,7 @@ import { buildJsonPluginConfigSchema } from "openclaw/plugin-sdk/plugin-entry";
 import { getToolPluginMetadata, toolPluginMetadataSymbol } from "openclaw/plugin-sdk/tool-plugin";
 import { contract, LIBRARY_PAGE } from "./contract.js";
 import { getPreparedPluginSecretInput } from "openclaw/plugin-sdk/secret-input-runtime";
-import { CONFIG_JSON_SCHEMA, resolveServiceUrl } from "./config.js";
+import { CONFIG_JSON_SCHEMA, DEFAULT_KEY_REFS, resolveServiceUrl } from "./config.js";
 import { createArrClient } from "./backend/arr.js";
 import { ART_ROUTE, Artwork } from "./backend/artwork.js";
 import { createMediaService } from "./backend/service.js";
@@ -35,10 +35,36 @@ const entry = defineFeaturePlugin({
       },
     });
 
+    // Schema defaults are display-only and the Gateway resolves only SecretRefs saved in config, so
+    // write the default references once when none are set. Users then only create the secrets.
+    const missingKeyRefs = (["sonarr", "radarr"] as const).filter((service) => {
+      const section = api.pluginConfig?.[service];
+      return !(section && typeof section === "object" && "apiKey" in section);
+    });
+    const seedKeyRefs = () =>
+      api.runtime.config.mutateConfigFile({
+        afterWrite: { mode: "auto" },
+        mutate(draft) {
+          const entries = ((draft.plugins ??= {}).entries ??= {}) as Record<string, { config?: Record<string, unknown> }>;
+          const config = ((entries[PLUGIN_ID] ??= {}).config ??= {});
+          for (const service of missingKeyRefs) {
+            const section = ((config[service] ??= {}) as Record<string, unknown>);
+            section.apiKey ??= { ...DEFAULT_KEY_REFS[service] };
+          }
+        },
+      });
+
     // Build both library snapshots as soon as the Gateway starts so the first view is instant.
     api.registerService({
       id: "media-storage:warm",
       start() {
+        if (missingKeyRefs.length > 0) {
+          seedKeyRefs().then(
+            () => api.logger.info(`media-storage: set default API key references for ${missingKeyRefs.join(", ")}.`),
+            (error) => api.logger.warn(`media-storage: could not set default API key references: ${String(error)}`),
+          );
+          return; // The config write reloads the plugin; the next instance warms up.
+        }
         void media.warm();
       },
     });

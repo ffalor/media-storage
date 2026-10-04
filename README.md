@@ -50,28 +50,31 @@ Config lives under `plugins.entries.media-storage.config`.
 | Key | Default | Notes |
 | --- | --- | --- |
 | `sonarr.url` | `http://localhost:8989/` | Sonarr base URL |
-| `sonarr.apiKey` | none | SecretRef (see below) |
+| `sonarr.apiKey` | secret `SONARR_API_KEY` | SecretRef (see below) |
 | `radarr.url` | `http://localhost:7878/` | Radarr base URL |
-| `radarr.apiKey` | none | SecretRef (see below) |
+| `radarr.apiKey` | secret `RADARR_API_KEY` | SecretRef (see below) |
 
-The API keys are declared as `configContracts.secretInputs` and must be SecretRefs: the config holds only a
-reference, Settings redacts it, and the plugin reads the resolved key per request without keeping it. Store each
-key as a **protected** entry in Settings → Secrets (or let your agent's `secrets` tool prompt you for it), with no
-allowed hosts. Then point the config at them, and set the URLs if they aren't the defaults:
+The API keys are SecretRefs (`configContracts.secretInputs`): config holds only a reference, Settings redacts it,
+and the plugin reads the resolved key per request without keeping it.
+
+1. In Settings → Secrets, add **protected** entries named `SONARR_API_KEY` and `RADARR_API_KEY` (no allowed
+   hosts needed). Find each key in Sonarr/Radarr under Settings → General → Security.
+2. Set the URLs in the plugin's settings, or:
+
+   ```sh
+   openclaw config set plugins.entries.media-storage.config.sonarr.url http://sonarr.local:8989/
+   openclaw config set plugins.entries.media-storage.config.radarr.url http://radarr.local:7878/
+   ```
+
+On first start the plugin writes the default references (`SONARR_API_KEY` / `RADARR_API_KEY`) into its config,
+so nothing else is needed. To use differently named secrets, change the `id` in the plugin's settings, or:
 
 ```sh
-openclaw config set plugins.entries.media-storage.config.sonarr.apiKey --ref-source store --ref-provider default --ref-id SONARR_API_KEY
-openclaw config set plugins.entries.media-storage.config.radarr.apiKey --ref-source store --ref-provider default --ref-id RADARR_API_KEY
-openclaw config set plugins.entries.media-storage.config.sonarr.url http://sonarr.local:8989/
-openclaw config set plugins.entries.media-storage.config.radarr.url http://radarr.local:7878/
+openclaw config set plugins.entries.media-storage.config.sonarr.apiKey --ref-source store --ref-provider default --ref-id MY_SONARR_KEY
 ```
 
-`plugins.entries.*` changes hot-reload the plugin and re-resolve its secrets, so no reload or restart is needed.
-If you later change a secret's value without changing config, apply it with:
-
-```sh
-openclaw secrets reload
-```
+Config changes hot-reload the plugin and re-resolve its secrets. If you add or change a secret's value without
+changing config, apply it with `openclaw secrets reload`.
 
 ## How data is refreshed
 

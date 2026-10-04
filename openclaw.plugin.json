@@ -2,7 +2,7 @@
   "id": "media-storage",
   "name": "Media Storage",
   "description": "Read-only storage analysis for Sonarr and Radarr libraries with a native Control UI page.",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
@@ -87,6 +87,34 @@
           }
         }
       }
+    }
+  },
+  "uiHints": {
+    "sonarr": {
+      "label": "Sonarr",
+      "help": "Connection to Sonarr (TV)."
+    },
+    "radarr": {
+      "label": "Radarr",
+      "help": "Connection to Radarr (movies)."
+    },
+    "sonarr.url": {
+      "label": "Sonarr URL",
+      "help": "Address of your Sonarr server as seen from the Gateway, for example http://sonarr.local:8989/.",
+      "placeholder": "http://localhost:8989/"
+    },
+    "sonarr.apiKey": {
+      "label": "Sonarr API key secret",
+      "help": "Which secret in Settings → Secrets holds the Sonarr API key. Set automatically to SONARR_API_KEY; to use a differently named secret, change only the \"id\" value. Find the key in Sonarr under Settings → General → Security."
+    },
+    "radarr.url": {
+      "label": "Radarr URL",
+      "help": "Address of your Radarr server as seen from the Gateway, for example http://radarr.local:7878/.",
+      "placeholder": "http://localhost:7878/"
+    },
+    "radarr.apiKey": {
+      "label": "Radarr API key secret",
+      "help": "Which secret in Settings → Secrets holds the Radarr API key. Set automatically to RADARR_API_KEY; to use a differently named secret, change only the \"id\" value. Find the key in Radarr under Settings → General → Security."
     }
   },
   "activation": {

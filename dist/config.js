@@ -28,6 +28,11 @@ const service = (name, defaultUrl) => ({
 });
 export const DEFAULT_SONARR_URL = "http://localhost:8989/";
 export const DEFAULT_RADARR_URL = "http://localhost:7878/";
+/** References written into config on first start when no `apiKey` is set. */
+export const DEFAULT_KEY_REFS = {
+    sonarr: { source: "store", provider: "default", id: "SONARR_API_KEY" },
+    radarr: { source: "store", provider: "default", id: "RADARR_API_KEY" },
+};
 export const CONFIG_JSON_SCHEMA = {
     type: "object",
     additionalProperties: false,
