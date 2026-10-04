@@ -16,7 +16,7 @@ const secretRef = {
         id: { type: "string", minLength: 1, maxLength: 256 },
     },
 };
-const service = (name, defaultUrl) => ({
+const service = (name, defaultUrl, defaultSecretId) => ({
     type: "object",
     additionalProperties: false,
     properties: {
@@ -24,6 +24,7 @@ const service = (name, defaultUrl) => ({
         apiKey: {
             description: `${name} API key as a SecretRef (recommended: a protected entry in Settings → Secrets).`,
             anyOf: [{ type: "string", minLength: 1, maxLength: 512 }, secretRef],
+            default: { source: "store", provider: "default", id: defaultSecretId },
         },
     },
 });
@@ -33,8 +34,8 @@ export const CONFIG_JSON_SCHEMA = {
     type: "object",
     additionalProperties: false,
     properties: {
-        sonarr: service("Sonarr", DEFAULT_SONARR_URL),
-        radarr: service("Radarr", DEFAULT_RADARR_URL),
+        sonarr: service("Sonarr", DEFAULT_SONARR_URL, "SONARR_API_KEY"),
+        radarr: service("Radarr", DEFAULT_RADARR_URL, "RADARR_API_KEY"),
     },
 };
 function httpUrl(value, fallback) {

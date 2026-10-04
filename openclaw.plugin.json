@@ -52,7 +52,12 @@
                   }
                 }
               }
-            ]
+            ],
+            "default": {
+              "source": "store",
+              "provider": "default",
+              "id": "SONARR_API_KEY"
+            }
           }
         }
       },
@@ -101,7 +106,12 @@
                   }
                 }
               }
-            ]
+            ],
+            "default": {
+              "source": "store",
+              "provider": "default",
+              "id": "RADARR_API_KEY"
+            }
           }
         }
       }
