@@ -2,7 +2,7 @@
   "id": "media-storage",
   "name": "Media Storage",
   "description": "Read-only storage analysis for Sonarr and Radarr libraries with a native Control UI page.",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
@@ -167,7 +167,7 @@
     },
     "tautulli.apiKey": {
       "label": "Tautulli API key secret",
-      "help": "Optional. A SecretRef to the secret holding the Tautulli API key, for example { \"source\": \"store\", \"provider\": \"default\", \"id\": \"TAUTULLI_API_KEY\" }. Find the key in Tautulli under Settings → Web Interface → API."
+      "help": "Which secret in Settings → Secrets holds the Tautulli API key. Set automatically to TAUTULLI_API_KEY; watch stats stay hidden until that secret exists. Find the key in Tautulli under Settings → Web Interface → API."
     }
   },
   "activation": {

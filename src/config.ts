@@ -38,6 +38,7 @@ export const DEFAULT_TAUTULLI_URL = "http://localhost:8181/";
 export const DEFAULT_KEY_REFS = {
   sonarr: { source: "store", provider: "default", id: "SONARR_API_KEY" },
   radarr: { source: "store", provider: "default", id: "RADARR_API_KEY" },
+  tautulli: { source: "store", provider: "default", id: "TAUTULLI_API_KEY" },
 } as const;
 
 export const CONFIG_JSON_SCHEMA = {
@@ -46,7 +47,7 @@ export const CONFIG_JSON_SCHEMA = {
   properties: {
     sonarr: service("Sonarr", DEFAULT_SONARR_URL),
     radarr: service("Radarr", DEFAULT_RADARR_URL),
-    // Optional: watch stats are shown only when tautulli.apiKey resolves. No default key reference is seeded.
+    // Optional: watch stats are shown only when tautulli.apiKey resolves to a value.
     tautulli: service("Tautulli", DEFAULT_TAUTULLI_URL),
   },
 };

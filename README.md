@@ -57,7 +57,7 @@ Config lives under `plugins.entries.media-storage.config`.
 | `radarr.url` | `http://localhost:7878/` | Radarr base URL |
 | `radarr.apiKey` | secret `RADARR_API_KEY` | SecretRef (see below) |
 | `tautulli.url` | `http://localhost:8181/` | Tautulli base URL (optional) |
-| `tautulli.apiKey` | unset | SecretRef; watch stats are hidden while unset |
+| `tautulli.apiKey` | secret `TAUTULLI_API_KEY` | SecretRef; watch stats are hidden until the secret exists |
 
 The API keys are SecretRefs (`configContracts.secretInputs`): config holds only a reference, Settings redacts it,
 and the plugin reads the resolved key per request without keeping it.
@@ -71,7 +71,7 @@ and the plugin reads the resolved key per request without keeping it.
    openclaw config set plugins.entries.media-storage.config.radarr.url http://radarr.local:7878/
    ```
 
-On first start the plugin writes the default references (`SONARR_API_KEY` / `RADARR_API_KEY`) into its config,
+On first start the plugin writes the default references (`SONARR_API_KEY` / `RADARR_API_KEY` / `TAUTULLI_API_KEY`) into its config,
 so nothing else is needed. To use differently named secrets, change the `id` in the plugin's settings, or:
 
 ```sh
@@ -80,11 +80,11 @@ openclaw config set plugins.entries.media-storage.config.sonarr.apiKey --ref-sou
 
 ### Tautulli watch stats (optional)
 
-Add a protected secret `TAUTULLI_API_KEY` (Tautulli → Settings → Web Interface → API), then:
+Add a protected secret `TAUTULLI_API_KEY` (Tautulli → Settings → Web Interface → API) and set the URL. The
+plugin writes the default reference on first start, like the Sonarr/Radarr keys:
 
 ```sh
 openclaw config set plugins.entries.media-storage.config.tautulli.url http://tautulli.local:8181/
-openclaw config set plugins.entries.media-storage.config.tautulli.apiKey --ref-source store --ref-provider default --ref-id TAUTULLI_API_KEY
 ```
 
 Titles are matched to Plex items by title and year. Unmatched titles show no watch stats and are left out of the

@@ -40,7 +40,7 @@ const entry = defineFeaturePlugin({
 
     // Schema defaults are display-only and the Gateway resolves only SecretRefs saved in config, so
     // write the default references once when none are set. Users then only create the secrets.
-    const missingKeyRefs = (["sonarr", "radarr"] as const).filter((service) => {
+    const missingKeyRefs = (["sonarr", "radarr", "tautulli"] as const).filter((service) => {
       const section = api.pluginConfig?.[service];
       return !(section && typeof section === "object" && "apiKey" in section);
     });
