@@ -11,6 +11,7 @@ import {
   type ServiceErrorT,
   type ServiceNameT,
   type WatchDetailT,
+  type RequestDetailT,
 } from "../contract.js";
 
 export type Resource<T> =
@@ -47,6 +48,8 @@ export class Store {
   readonly movieDetail = new Map<number, Resource<MovieDetailT>>();
   /** Tautulli stats keyed by "series:<id>" / "movie:<id>". */
   readonly watchDetail = new Map<string, Resource<WatchDetailT>>();
+  /** Seerr requests keyed by "series:<id>" / "movie:<id>". */
+  readonly requestDetail = new Map<string, Resource<RequestDetailT>>();
   refreshing = false;
   /** UI preferences that survive navigation within the page. */
   readonly prefs = { tvQuery: "", tvSort: "size-desc", movieQuery: "", movieSort: "size-desc", fileSort: "size" as "size" | "episode", topCount: readTopCount() };
@@ -98,6 +101,7 @@ export class Store {
       this.seasonFiles.clear();
       this.movieDetail.clear();
       this.watchDetail.clear();
+      this.requestDetail.clear();
     }
     this.overview = { status: "loading", data: "data" in this.overview ? this.overview.data : undefined };
     if (this.series.status !== "ready" || refresh) this.series = { status: "loading", data: "data" in this.series ? this.series.data : undefined };
@@ -209,6 +213,10 @@ export class Store {
 
   loadWatch(kind: "series" | "movie", id: number, force = false) {
     return this.detail(this.watchDetail as Map<string | number, Resource<WatchDetailT>>, `${kind}:${id}`, "tautulli", () => this.client.invoke("watch-detail", { kind, id }), force);
+  }
+
+  loadRequests(kind: "series" | "movie", id: number, force = false) {
+    return this.detail(this.requestDetail as Map<string | number, Resource<RequestDetailT>>, `${kind}:${id}`, "seerr", () => this.client.invoke("request-detail", { kind, id }), force);
   }
 
   loadMovie(movieId: number, force = false) {

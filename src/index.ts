@@ -8,6 +8,7 @@ import { createArrClient } from "./backend/arr.js";
 import { ART_ROUTE, Artwork } from "./backend/artwork.js";
 import { createMediaService } from "./backend/service.js";
 import { createTautulliClient, createWatchService } from "./backend/tautulli.js";
+import { createRequestService, createSeerrClient } from "./backend/seerr.js";
 
 const PLUGIN_ID = "media-storage";
 
@@ -18,7 +19,7 @@ const entry = defineFeaturePlugin({
   setup(api, events) {
     // API keys are read from the prepared secrets snapshot on every request and never retained,
     // so a reload or failed secret makes them unavailable immediately. They never enter logs or responses.
-    const apiKey = (service: "sonarr" | "radarr" | "tautulli") => () => getPreparedPluginSecretInput(PLUGIN_ID, `${service}.apiKey`).value;
+    const apiKey = (service: "sonarr" | "radarr" | "tautulli" | "seerr") => () => getPreparedPluginSecretInput(PLUGIN_ID, `${service}.apiKey`).value;
     const sonarr = createArrClient("sonarr", resolveServiceUrl(api.pluginConfig, "sonarr"), apiKey("sonarr"));
     const radarr = createArrClient("radarr", resolveServiceUrl(api.pluginConfig, "radarr"), apiKey("radarr"));
     const tautulli = createTautulliClient(resolveServiceUrl(api.pluginConfig, "tautulli"), apiKey("tautulli"));
@@ -28,6 +29,7 @@ const entry = defineFeaturePlugin({
       radarr,
       art,
       watch: createWatchService(tautulli),
+      requests: createRequestService(createSeerrClient(resolveServiceUrl(api.pluginConfig, "seerr"), apiKey("seerr"))),
       logger: api.logger,
       onLibraryUpdated: (update) => {
         try {
@@ -40,7 +42,7 @@ const entry = defineFeaturePlugin({
 
     // Schema defaults are display-only and the Gateway resolves only SecretRefs saved in config, so
     // write the default references once when none are set. Users then only create the secrets.
-    const missingKeyRefs = (["sonarr", "radarr", "tautulli"] as const).filter((service) => {
+    const missingKeyRefs = (["sonarr", "radarr", "tautulli", "seerr"] as const).filter((service) => {
       const section = api.pluginConfig?.[service];
       return !(section && typeof section === "object" && "apiKey" in section);
     });
@@ -84,6 +86,7 @@ const entry = defineFeaturePlugin({
       movies: (input) => media.moviesPage({ ...input, limit: clampLimit(input.limit) }),
       "movie-detail": ({ movieId }) => media.movieDetail(movieId),
       "watch-detail": ({ kind, id }) => media.watchDetail(kind, id),
+      "request-detail": ({ kind, id }) => media.requestDetail(kind, id),
     };
   },
 });

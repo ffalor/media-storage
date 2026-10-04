@@ -420,14 +420,14 @@ a.ms-season:hover .ms-season__art { transform: translateY(-3px); box-shadow: 0 1
 /* Tautulli watch stats (only rendered when Tautulli is configured). */
 .ms-watch { font-size: 12px; color: var(--ms-muted); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ms-watch.is-never { color: var(--warn, #e8b44a); }
-.ms-rank__body:has(.ms-watch) { gap: 2px; }
+.ms-rank__body:has(.ms-meta-line) { gap: 2px; }
 .ms-why__cell.is-warn dd { color: var(--warn, #e8b44a); }
 .ms-watch-note { margin: 0; }
 .ms-hero__watch { margin-top: 0; }
 .ms-hero__watch .ms-fact { font-size: 13px; }
 .ms-hero__links { display: flex; flex-wrap: wrap; gap: 8px; }
 .ms-h4 { font-size: 12.5px; font-weight: 600; color: var(--ms-muted); margin-bottom: 6px; }
-.ms-watch-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: var(--ms-gap); }
+.ms-watch-grid { display: grid; align-items: start; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: var(--ms-gap); }
 .ms-watch-block { padding: 14px 16px; border-radius: var(--ms-radius); background: var(--ms-surface); }
 .ms-watch-list { display: grid; }
 .ms-watch-list li { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 7px 0; border-top: 1px solid var(--ms-line); font-size: 13px; }
@@ -435,3 +435,27 @@ a.ms-season:hover .ms-season__art { transform: translateY(-3px); box-shadow: 0 1
 .ms-watch-list__main { min-width: 0; color: var(--ms-strong); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ms-watch-list__code { color: var(--ms-muted); font-variant-numeric: tabular-nums; }
 .ms-watch-list__side { flex: none; color: var(--ms-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+
+/* Seerr requests (only rendered when Seerr is configured). */
+.ms-meta-line { display: flex; gap: 6px; min-width: 0; font-size: 12px; color: var(--ms-muted); white-space: nowrap; overflow: hidden; }
+.ms-meta-line > * { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ms-meta-line__sep { flex: none; }
+.ms-req { font-size: 12px; color: var(--ms-muted); }
+.ms-season__meta.ms-req { font-size: 12px; }
+.ms-hero__requested { color: rgb(255 255 255 / 0.72); font-size: 13px; }
+.ms-hero__requested strong { color: #fff; font-weight: 600; }
+.ms-season-head__meta strong { color: #fff; font-weight: 600; }
+.ms-users { --ms-u0: #6e8bff; --ms-u1: #f0a35e; --ms-u2: #3ccf9a; --ms-u3: #d97ae8; --ms-u4: #e8cf4a; --ms-u5: #5ec8f0; --ms-u6: #ef6b6b; --ms-u7: #9a9aa3; }
+.ms-users__bar { height: 14px; border-radius: 7px; }
+.ms-users__seg { height: 100%; box-shadow: inset -1px 0 0 var(--ms-surface); }
+.ms-users .is-u0 { background: var(--ms-u0); } .ms-users .is-u1 { background: var(--ms-u1); } .ms-users .is-u2 { background: var(--ms-u2); } .ms-users .is-u3 { background: var(--ms-u3); }
+.ms-users .is-u4 { background: var(--ms-u4); } .ms-users .is-u5 { background: var(--ms-u5); } .ms-users .is-u6 { background: var(--ms-u6); } .ms-users .is-u7 { background: var(--ms-u7); }
+.ms-users .is-rest { background: color-mix(in oklab, var(--ms-muted) 30%, transparent); }
+.ms-users__legend { display: grid; margin-top: 4px; }
+.ms-users__row { display: grid; grid-template-columns: 10px minmax(0, auto) minmax(0, 1fr) auto 52px; align-items: baseline; gap: 10px; padding: 6px 0; border-top: 1px solid var(--ms-line); font-size: 13px; }
+.ms-users__row:first-child { border-top: 0; }
+.ms-users__key { width: 10px; height: 10px; border-radius: 3px; align-self: center; }
+.ms-users__name { color: var(--ms-strong); font-weight: 550; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ms-users__detail { color: var(--ms-muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ms-users__size { color: var(--ms-strong); font-variant-numeric: tabular-nums; }
+.ms-users__row .ms-pct { margin-left: 0; text-align: right; }

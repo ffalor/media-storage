@@ -5,6 +5,8 @@ import type {
   MovieDetailT,
   MovieSummaryT,
   OverviewT,
+  RequestDetailT,
+  RequestOverviewT,
   SeasonFilesT,
   SeriesDetailT,
   SeriesSummaryT,
@@ -155,14 +157,17 @@ export class MediaStorageApp {
     if (route.view === "series") {
       void this.store.loadSeries(route.seriesId);
       void this.store.loadWatch("series", route.seriesId);
+      void this.store.loadRequests("series", route.seriesId);
     }
     if (route.view === "season") {
       void this.store.loadSeries(route.seriesId);
       void this.store.loadSeason(route.seriesId, route.season);
+      void this.store.loadRequests("series", route.seriesId);
     }
     if (route.view === "movie") {
       void this.store.loadMovie(route.movieId);
       void this.store.loadWatch("movie", route.movieId);
+      void this.store.loadRequests("movie", route.movieId);
     }
   }
 
@@ -260,7 +265,7 @@ export class MediaStorageApp {
         h(
           "div",
           { class: "ms-header__status" },
-          h("span", { class: "ms-svcs" }, service("Sonarr", data?.tv.status), service("Radarr", data?.movies.status), data?.watch ? service("Tautulli", { ...data.watch.status, healthIssues: 0 }) : null),
+          h("span", { class: "ms-svcs" }, service("Sonarr", data?.tv.status), service("Radarr", data?.movies.status), data?.watch ? service("Tautulli", { ...data.watch.status, healthIssues: 0 }) : null, data?.requests ? service("Seerr", { ...data.requests.status, healthIssues: 0 }) : null),
           h("span", { class: "ms-updated", "data-ms-updated": "", "aria-live": "polite" }, data ? `Updated ${fmtRelative(data.retrievedAt)}` : ""),
           refresh,
         ),
@@ -274,7 +279,7 @@ export class MediaStorageApp {
   }
 
   private errorState(error: ServiceErrorT, retry: () => void, compact = false) {
-    const name = { sonarr: "Sonarr", radarr: "Radarr", tautulli: "Tautulli" }[error.service];
+    const name = { sonarr: "Sonarr", radarr: "Radarr", tautulli: "Tautulli", seerr: "Seerr" }[error.service];
     const title =
       error.code === "not_found"
         ? "Not found"
@@ -315,6 +320,7 @@ export class MediaStorageApp {
     if (features.childElementCount) view.append(features);
     // Watch stats appear only when Tautulli is configured and answering; its failures show in the header only.
     if (data.watch?.status.state === "ok") view.append(this.watchOverview(data.watch, data));
+    if (data.requests?.status.state === "ok") view.append(requestOverview(data.requests, data.combinedBytes));
     const ranks = h("div", { class: "ms-ranks" });
     const drawRanks = () => ranks.replaceChildren(this.rankList("Top series", data.tv, "tv"), this.rankList("Top movies", data.movies, "movie", control));
     const control = this.topCountControl(drawRanks);
@@ -371,7 +377,7 @@ export class MediaStorageApp {
       .filter((item) => item.sizeBytes > 0)
       .sort((a, b) => b.sizeBytes - a.sizeBytes)
       .slice(0, n)
-      .map((item) => ({ id: item.id, title: item.title, year: item.year, sizeBytes: item.sizeBytes, poster: item.poster, watch: item.watch }));
+      .map((item) => ({ id: item.id, title: item.title, year: item.year, sizeBytes: item.sizeBytes, poster: item.poster, watch: item.watch, requestedBy: item.requestedBy }));
   }
 
   private overviewHero(data: OverviewT) {
@@ -473,7 +479,7 @@ export class MediaStorageApp {
             { class: "ms-rank__row" },
             h("span", { class: "ms-rank__n" }, String(index + 1)),
             artwork(item.poster, item.title, "ms-rank__poster"),
-            h("span", { class: "ms-rank__body" }, h("span", { class: "ms-rank__title" }, item.title, item.year ? h("span", { class: "ms-rank__year" }, ` ${item.year}`) : null), watchLine(item.watch)),
+            h("span", { class: "ms-rank__body" }, h("span", { class: "ms-rank__title" }, item.title, item.year ? h("span", { class: "ms-rank__year" }, ` ${item.year}`) : null), itemMeta(item.watch, item.requestedBy)),
             h("span", { class: "ms-rank__size" }, sizeBlock(item.sizeBytes, "ms-size ms-size--row"), sharePct(item.sizeBytes, totals.sizeBytes)),
           ),
         ),
@@ -498,22 +504,6 @@ export class MediaStorageApp {
       h("div", { class: `ms-why__cell${warn ? " is-warn" : ""}` }, h("dt", null, label), h("dd", { title: exactBytes(bytes) }, fmtBytes(bytes), h("span", { class: "ms-why__note" }, note)));
     const idle = data.combinedBytes ? ((neverBytes + staleBytes) / data.combinedBytes) * 100 : 0;
     const unmatched = sum((t) => t.unmatched);
-    const popular = (title: string, rows: NonNullable<WatchOverviewT["tv"]>["popular"] | undefined, kind: "tv" | "movie") => {
-      if (!rows) return null;
-      const list = h("ol", { class: "ms-rank__list" });
-      rows.forEach((row, index) => {
-        const content = [
-          h("span", { class: "ms-rank__n" }, String(index + 1)),
-          artwork(row.poster, row.title, "ms-rank__poster"),
-          h("span", { class: "ms-rank__body" }, h("span", { class: "ms-rank__title" }, row.title), h("span", { class: "ms-watch" }, `${fmtInt(row.plays)} ${row.plays === 1 ? "play" : "plays"} · ${fmtInt(row.users)} ${row.users === 1 ? "user" : "users"}${row.lastPlayed ? ` · ${fmtAgo(row.lastPlayed)}` : ""}`)),
-          h("span", { class: "ms-rank__size" }, row.sizeBytes !== null ? sizeBlock(row.sizeBytes, "ms-size ms-size--row") : h("span", { class: "ms-pct" }, "Not in library")),
-        ];
-        const route: Route | null = row.id === null ? null : kind === "tv" ? { view: "series", seriesId: row.id } : { view: "movie", movieId: row.id };
-        list.append(h("li", null, route ? this.link(route, { class: "ms-rank__row" }, ...content) : h("div", { class: "ms-rank__row" }, ...content)));
-      });
-      if (!rows.length) list.append(h("li", { class: "ms-empty-line" }, "Nothing played in the last 30 days."));
-      return h("section", { class: "ms-rank" }, h("div", { class: "ms-rank__head" }, h("h3", { class: "ms-h3" }, title)), list);
-    };
     return h(
       "section",
       { class: "ms-section ms-watch-overview", "aria-labelledby": "ms-watch-h" },
@@ -526,7 +516,6 @@ export class MediaStorageApp {
         h("div", { class: "ms-why__cell" }, h("dt", null, "Idle share of storage"), h("dd", null, `${idle.toFixed(1)}%`, h("span", { class: "ms-why__note" }, `never watched or idle ${months}+ months`))),
       ),
       unmatched ? h("p", { class: "ms-pct ms-watch-note" }, `${fmtInt(unmatched)} ${unmatched === 1 ? "item" : "items"} with files could not be matched to Plex and are not counted.`) : null,
-      h("div", { class: "ms-ranks" }, popular("Most watched series · 30 days", watch.tv?.popular, "tv"), popular("Most watched movies · 30 days", watch.movies?.popular, "movie")),
     );
   }
 
@@ -725,6 +714,7 @@ export class MediaStorageApp {
     const data = "data" in res ? res.data : undefined;
     const title = data?.title ?? summary?.title ?? "Series";
     const watch = this.watchFor("series", seriesId);
+    const requests = this.requestsFor("series", seriesId);
     const view = h("article", { class: "ms-detail" });
     view.append(this.crumbs(["TV", { view: "tv" }], [title, null]));
     view.append(
@@ -736,8 +726,9 @@ export class MediaStorageApp {
         sizeBytes: data?.sizeBytes ?? summary?.sizeBytes ?? null,
         facts: data ? [[fmtInt(data.seasonCount), data.seasonCount === 1 ? "season" : "seasons"], [fmtInt(data.fileCount), data.fileCount === 1 ? "file" : "files"]] : summary ? [[fmtInt(summary.seasonCount), "seasons"], [fmtInt(summary.fileCount), "files"]] : [],
         overview: data?.overview ?? null,
-        links: [data?.webUrl ? { href: data.webUrl, service: "Sonarr" } : null, watch?.webUrl ? { href: watch.webUrl, service: "Tautulli" } : null],
+        links: [data?.webUrl ? { href: data.webUrl, service: "Sonarr" } : null, watch?.webUrl ? { href: watch.webUrl, service: "Tautulli" } : null, requests?.webUrl ? { href: requests.webUrl, service: "Seerr" } : null],
         watch,
+        requested: requestLine(requests?.requests ?? []),
         kind: "tv",
       }),
     );
@@ -766,6 +757,7 @@ export class MediaStorageApp {
           h("span", { class: "ms-season__size" }, sizeBlock(season.sizeBytes), sharePct(season.sizeBytes, data.sizeBytes)),
           h("span", { class: "ms-season__meta" }, meta),
           watch && !empty ? watchLine(played ? { plays: played.plays, lastPlayed: played.lastPlayed } : { plays: 0, lastPlayed: null }, "ms-season__meta") : null,
+          requests && !empty ? requestedTag(seasonRequest(requests.requests, season.seasonNumber)?.user ?? null, "ms-season__meta") : null,
         ),
       ];
       grid.append(
@@ -796,6 +788,10 @@ export class MediaStorageApp {
     view.append(this.crumbs(["TV", { view: "tv" }], [seriesTitle, { view: "series", seriesId }], [label, null]));
 
     const seasonInfo = seriesData?.seasons.find((s) => s.seasonNumber === seasonNumber);
+    const seasonReq = (() => {
+      const requests = this.requestsFor("series", seriesId);
+      return requests ? seasonRequest(requests.requests, seasonNumber) : null;
+    })();
     const header = h(
       "header",
       { class: "ms-season-head" },
@@ -807,6 +803,7 @@ export class MediaStorageApp {
         h("p", { class: "ms-eyebrow" }, seriesTitle),
         h("h2", { class: "ms-h1", tabindex: "-1", "data-ms-heading": "" }, label),
         data ? h("p", { class: "ms-season-head__meta" }, sizeBlock(data.sizeBytes, "ms-size ms-size--lg"), h("span", null, `${fmtInt(data.total)} unique ${data.total === 1 ? "file" : "files"}`)) : h("span", { class: "ms-skel ms-skel--line" }),
+        seasonReq ? requestLine([seasonReq], "ms-season-head__meta") : null,
         data?.webUrl ? serviceLink(data.webUrl, "Sonarr") : null,
       ),
     );
@@ -883,6 +880,7 @@ export class MediaStorageApp {
     const data = "data" in res ? res.data : undefined;
     const title = data?.title ?? summary?.title ?? "Movie";
     const watch = this.watchFor("movie", movieId);
+    const requests = this.requestsFor("movie", movieId);
     const view = h("article", { class: "ms-detail" });
     view.append(this.crumbs(["Movies", { view: "movies" }], [title, null]));
     const spec = data?.file?.spec;
@@ -897,8 +895,9 @@ export class MediaStorageApp {
         sizeBytes: data ? (data.hasFile ? data.sizeBytes : null) : (summary?.sizeBytes ?? null),
         facts: spec ? ([[resolutionLabel(spec.resolutionClass) ?? spec.resolution ?? "—", spec.quality ?? ""], [spec.videoCodec ?? "—", spec.dynamicRange ?? "video"]] as [string, string][]) : [],
         overview: data?.overview ?? null,
-        links: [data?.webUrl ? { href: data.webUrl, service: "Radarr" } : null, watch?.webUrl ? { href: watch.webUrl, service: "Tautulli" } : null],
+        links: [data?.webUrl ? { href: data.webUrl, service: "Radarr" } : null, watch?.webUrl ? { href: watch.webUrl, service: "Tautulli" } : null, requests?.webUrl ? { href: requests.webUrl, service: "Seerr" } : null],
         watch,
+        requested: requestLine(requests?.requests ?? []),
         kind: "movie",
       }),
     );
@@ -982,6 +981,8 @@ export class MediaStorageApp {
     links: ({ href: string; service: string } | null)[];
     /** Tautulli stats, shown as extra figures when matched. */
     watch?: WatchDetailT | null;
+    /** "Requested by …" line from Seerr. */
+    requested?: HTMLElement | null;
     kind: "tv" | "movie";
   }) {
     const watch = opts.watch;
@@ -1014,6 +1015,7 @@ export class MediaStorageApp {
             ...opts.facts.map(([value, label]) => h("span", { class: "ms-fact" }, h("strong", null, value), label ? ` ${label}` : "")),
           ),
           watchFacts.length ? h("div", { class: "ms-hero__figures ms-hero__watch", "aria-label": "Watch stats from Tautulli" }, ...watchFacts.map(([value, label]) => h("span", { class: "ms-fact" }, h("strong", null, value), ` ${label}`))) : null,
+          opts.requested ?? null,
           opts.overview ? h("p", { class: "ms-hero__overview" }, opts.overview) : null,
           links.length ? h("div", { class: "ms-hero__links" }, ...links.map((link) => serviceLink(link.href, link.service))) : null,
         ),
@@ -1026,6 +1028,13 @@ export class MediaStorageApp {
     const res = this.store.watchDetail.get(`${kind}:${id}`);
     const data = res && "data" in res ? res.data : undefined;
     return data?.state === "ok" ? data : null;
+  }
+
+  /** Seerr requests for an item, or null while loading, unconfigured, or failing. Unrequested items keep their Seerr link. */
+  private requestsFor(kind: "series" | "movie", id: number): RequestDetailT | null {
+    const res = this.store.requestDetail.get(`${kind}:${id}`);
+    const data = res && "data" in res ? res.data : undefined;
+    return data && data.state !== "not_configured" ? data : null;
   }
 
   private watchSection(watch: WatchDetailT, kind: "series" | "movie") {
@@ -1094,6 +1103,93 @@ function watchLine(watch: WatchT | null | undefined, cls = "ms-watch") {
   if (!watch) return null;
   if (!watch.plays) return h("span", { class: `${cls} ms-watch is-never` }, "Never watched");
   return h("span", { class: `${cls} ms-watch`, title: fmtDate(watch.lastPlayed) ?? "" }, `${fmtInt(watch.plays)} ${watch.plays === 1 ? "play" : "plays"}${watch.lastPlayed ? ` · ${fmtAgo(watch.lastPlayed)}` : ""}`);
+}
+
+/** Play count and requesters on one muted line, for list rows. */
+function itemMeta(watch: WatchT | null | undefined, requestedBy: string[] | null | undefined) {
+  const play = watchLine(watch);
+  const req = requestedBy?.length ? h("span", { class: "ms-req" }, `Requested by ${requestedBy.slice(0, 2).join(", ")}${requestedBy.length > 2 ? ` +${requestedBy.length - 2}` : ""}`) : null;
+  if (!play && !req) return null;
+  return h("span", { class: "ms-meta-line" }, play, play && req ? h("span", { class: "ms-meta-line__sep", "aria-hidden": "true" }, "·") : null, req);
+}
+
+type RequestRow = RequestDetailT["requests"][number];
+
+/** The request a season is attributed to: the first that names it, else the series' first request. */
+function seasonRequest(requests: RequestRow[], seasonNumber: number) {
+  return requests.find((r) => r.seasons.includes(seasonNumber)) ?? requests[0] ?? null;
+}
+
+/** "Requested by X · Mar 3, 2026", plus later requesters. Null when nothing was requested. */
+function requestLine(requests: RequestRow[], cls = "ms-hero__requested") {
+  const first = requests[0];
+  if (!first) return null;
+  const others = [...new Set(requests.map((r) => r.user))].filter((user) => user !== first.user);
+  return h(
+    "p",
+    { class: cls },
+    "Requested by ",
+    h("strong", null, first.user),
+    ` · ${fmtDate(first.at) ?? ""}`,
+    others.length ? ` · also ${others.slice(0, 3).join(", ")}${others.length > 3 ? ` +${others.length - 3}` : ""}` : "",
+  );
+}
+
+function requestedTag(user: string | null, cls: string) {
+  return user ? h("span", { class: `${cls} ms-req` }, `Requested by ${user}`) : null;
+}
+
+const USER_COLORS = 8;
+
+/** One bar of storage split by requester, then everything nobody requested. */
+function requestOverview(req: RequestOverviewT, total: number) {
+  const pct = (bytes: number) => (total > 0 ? (bytes / total) * 100 : 0);
+  const fmtPct = (bytes: number) => {
+    const p = pct(bytes);
+    return p > 0 && p < 0.1 ? "<0.1%" : `${p.toFixed(1)}%`;
+  };
+  const requested = req.users.reduce((sum, user) => sum + user.sizeBytes, 0);
+  const bar = h("div", { class: "ms-stack__bar ms-users__bar", role: "img", "aria-label": `Requested content uses ${fmtPct(requested)} of storage` });
+  const color = (index: number) => `is-u${Math.min(index, USER_COLORS - 1)}`;
+  const shown = req.users.slice(0, USER_COLORS - 1);
+  const rest = req.users.slice(USER_COLORS - 1);
+  const restBytes = rest.reduce((sum, user) => sum + user.sizeBytes, 0);
+  const segment = (cls: string, bytes: number, title: string) => {
+    const seg = h("span", { class: `ms-users__seg ${cls}`, title: `${title} · ${fmtBytes(bytes)} · ${fmtPct(bytes)}` });
+    seg.style.width = `${pct(bytes).toFixed(3)}%`;
+    return seg;
+  };
+  shown.forEach((user, index) => bar.append(segment(color(index), user.sizeBytes, user.name)));
+  if (restBytes) bar.append(segment(color(USER_COLORS - 1), restBytes, `${rest.length} more`));
+  if (req.notRequestedBytes) bar.append(segment("is-rest", req.notRequestedBytes, "Not requested"));
+  const legendRow = (cls: string, name: string, bytes: number, detail: string | null, never: number | null) =>
+    h(
+      "li",
+      { class: "ms-users__row" },
+      h("i", { class: `ms-users__key ${cls}`, "aria-hidden": "true" }),
+      h("span", { class: "ms-users__name" }, name),
+      h("span", { class: "ms-users__detail" }, [detail, never ? `${fmtBytes(never)} never watched` : null].filter(Boolean).join(" · ")),
+      h("span", { class: "ms-users__size", title: exactBytes(bytes) }, fmtBytes(bytes)),
+      h("span", { class: "ms-pct" }, fmtPct(bytes)),
+    );
+  const titles = (n: number) => `${fmtInt(n)} ${n === 1 ? "title" : "titles"}`;
+  return h(
+    "section",
+    { class: "ms-section", "aria-labelledby": "ms-req-h" },
+    h("div", { class: "ms-section__head" }, h("h3", { class: "ms-h3", id: "ms-req-h" }, "Requested content by user"), h("span", { class: "ms-pct" }, `From Seerr${req.status.version ? ` ${req.status.version}` : ""}`)),
+    h(
+      "div",
+      { class: "ms-stack ms-users" },
+      h("div", { class: "ms-stack__head" }, h("span", null, "Requests account for ", h("strong", null, fmtPct(requested)), " of storage"), h("span", { class: "ms-stack__total" }, `${fmtBytes(requested)} of ${fmtBytes(total)}`)),
+      bar,
+      h(
+        "ol",
+        { class: "ms-users__legend" },
+        ...req.users.map((user, index) => legendRow(color(index), user.name, user.sizeBytes, titles(user.items), user.neverWatchedBytes)),
+        req.notRequestedBytes ? legendRow("is-rest", "Not requested", req.notRequestedBytes, "added in Sonarr/Radarr", null) : null,
+      ),
+    ),
+  );
 }
 
 /** Share of the whole library, as muted text beside a size. */

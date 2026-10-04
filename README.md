@@ -9,9 +9,10 @@ Control UI, showing how much storage your Sonarr and Radarr libraries use, down 
 - **TV:** poster grid with search and sorting, then series → seasons (including Specials) → individual files.
 - **Movies:** poster grid with search and sorting, then a detail view explaining each file's size.
 - **Watch stats (optional):** with Tautulli configured, play counts and last-watched dates beside sizes, storage
-  that was never watched or not watched in 6 months, the most-watched titles, and per-title plays, watch time,
-  top viewers and recent plays.
-- Live data from the Sonarr/Radarr/Tautulli APIs; nothing is written to any of them.
+  that was never watched or not watched in 6 months, and per-title plays, watch time, top viewers and recent plays.
+- **Requests (optional):** with Seerr configured, storage broken down by the user who requested it, and who
+  requested each series, season and movie.
+- Live data from the Sonarr/Radarr/Tautulli/Seerr APIs; nothing is written to any of them.
 
 Built and tested against OpenClaw 2026.9.7.
 
@@ -58,6 +59,8 @@ Config lives under `plugins.entries.media-storage.config`.
 | `radarr.apiKey` | secret `RADARR_API_KEY` | SecretRef (see below) |
 | `tautulli.url` | `http://localhost:8181/` | Tautulli base URL (optional) |
 | `tautulli.apiKey` | secret `TAUTULLI_API_KEY` | SecretRef; watch stats are hidden until the secret exists |
+| `seerr.url` | `http://localhost:5055/` | Seerr base URL (optional) |
+| `seerr.apiKey` | secret `SEERR_API_KEY` | SecretRef; request info is hidden until the secret exists |
 
 The API keys are SecretRefs (`configContracts.secretInputs`): config holds only a reference, Settings redacts it,
 and the plugin reads the resolved key per request without keeping it.
@@ -71,7 +74,7 @@ and the plugin reads the resolved key per request without keeping it.
    openclaw config set plugins.entries.media-storage.config.radarr.url http://radarr.local:7878/
    ```
 
-On first start the plugin writes the default references (`SONARR_API_KEY` / `RADARR_API_KEY` / `TAUTULLI_API_KEY`) into its config,
+On first start the plugin writes the default references (`SONARR_API_KEY` / `RADARR_API_KEY` / `TAUTULLI_API_KEY` / `SEERR_API_KEY`) into its config,
 so nothing else is needed. To use differently named secrets, change the `id` in the plugin's settings, or:
 
 ```sh
@@ -90,6 +93,14 @@ openclaw config set plugins.entries.media-storage.config.tautulli.url http://tau
 Titles are matched to Plex items by title and year. Unmatched titles show no watch stats and are left out of the
 "never watched" totals. If Tautulli is unreachable, its status dot turns red and storage data is unaffected.
 Watch data is cached for 10 minutes (detail views for 2) and refreshed by the Refresh button.
+
+### Seerr requests (optional)
+
+Add a protected secret `SEERR_API_KEY` (Seerr → Settings → General → API Key) and set
+`plugins.entries.media-storage.config.seerr.url`. Requests are matched to Sonarr/Radarr by TVDB/TMDB id; pending and
+declined requests are ignored. Storage is attributed to the first user who requested each season (or movie); seasons
+no request names, such as ones Sonarr added later, belong to the series' first requester. Titles with no accepted
+request count as "Not requested".
 
 Config changes hot-reload the plugin and re-resolve its secrets. If you add or change a secret's value without
 changing config, apply it with `openclaw secrets reload`.
@@ -127,7 +138,7 @@ list in one request. On a library of ~150 series and ~380 movies it takes about 
 
 ## Security
 
-- **Read-only:** every operation is a query requiring `operator.read`. Nothing modifies Sonarr, Radarr, Tautulli or files.
+- **Read-only:** every operation is a query requiring `operator.read`. Nothing modifies Sonarr, Radarr, Tautulli, Seerr or files.
 - **Keys stay server-side:** the browser talks only to the plugin's typed operations. API keys are used by the
   Gateway backend and never appear in responses, logs, image URLs or the browser bundle.
 - **Artwork:** served from `/media-storage/art/v1/<payload>.<signature>`. The HMAC signature means the browser can

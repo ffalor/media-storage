@@ -143,25 +143,10 @@ export function createWatchService(tautulli) {
                 entries[lib.section_type].push({ ratingKey, sectionId, title, year: num(row.year), plays: num(row.play_count), lastPlayed: num(row.last_played) });
             }
         }));
-        const popular = async (statId) => {
-            const stat = await tautulli
-                .call("get_home_stats", { stat_id: statId, time_range: 30, stats_count: 5 })
-                .catch(() => ({ rows: [] }));
-            return (stat.rows ?? []).filter((row) => !row.live).map((row) => ({
-                ratingKey: num(row.grandparent_rating_key) || num(row.rating_key),
-                title: text(row.title) ?? "Unknown",
-                plays: num(row.total_plays),
-                users: num(row.users_watched),
-                lastPlayed: num(row.last_play),
-            }));
-        };
-        const [popularTv, popularMovies] = await Promise.all([popular("popular_tv"), popular("popular_movies")]);
         return {
             version: text(info.tautulli_version, 64),
             tv: createMatcher(merge(entries.show)),
             movies: createMatcher(merge(entries.movie)),
-            byKey: new Map([...entries.show, ...entries.movie].map((entry) => [entry.ratingKey, entry])),
-            popular: { tv: popularTv, movies: popularMovies },
         };
     }
     /** The same title in several Plex libraries (4K + HD) is one item to Sonarr/Radarr. */
@@ -192,7 +177,7 @@ export function createWatchService(tautulli) {
             return null;
         })
         : Promise.resolve(null);
-    function totals(lookup, items, popular, byKey) {
+    function totals(lookup, items) {
         const cutoff = (Date.now() - STALE_DAYS * DAY) / 1000;
         const out = { matched: 0, unmatched: 0, neverWatched: { count: 0, sizeBytes: 0 }, stale: { count: 0, sizeBytes: 0 } };
         for (const item of items) {
@@ -210,15 +195,7 @@ export function createWatchService(tautulli) {
                 bucket.sizeBytes += item.sizeBytes;
             }
         }
-        const findItem = createMatcher(items);
-        return {
-            ...out,
-            popular: popular.map((row) => {
-                const entry = byKey.get(row.ratingKey);
-                const item = findItem(entry?.title ?? row.title, entry?.year ?? 0);
-                return { id: item?.id ?? null, title: item?.title ?? row.title, plays: row.plays, users: row.users, lastPlayed: iso(row.lastPlayed), sizeBytes: item ? item.sizeBytes : null, poster: item?.poster ?? null };
-            }),
-        };
+        return out;
     }
     return {
         configured: () => tautulli.configured,
@@ -234,8 +211,8 @@ export function createWatchService(tautulli) {
             return {
                 status: { state: "ok", version: idx.version, error: null },
                 staleDays: STALE_DAYS,
-                tv: libraries.tv ? totals(idx.tv, libraries.tv, idx.popular.tv, idx.byKey) : null,
-                movies: libraries.movies ? totals(idx.movies, libraries.movies, idx.popular.movies, idx.byKey) : null,
+                tv: libraries.tv ? totals(idx.tv, libraries.tv) : null,
+                movies: libraries.movies ? totals(idx.movies, libraries.movies) : null,
             };
         },
         /** Per-item stats. `item` is the Sonarr/Radarr title and year used to find the Plex item. */
@@ -249,14 +226,25 @@ export function createWatchService(tautulli) {
                 if (!entry)
                     return empty("unmatched");
                 const key = entry.ratingKey;
-                const [windows, users, history, seasons] = await Promise.all([
+                // Tautulli's per-season play counts are often empty, so a series reads its whole history
+                // (newest first) and counts plays per season itself.
+                const [windows, users, history] = await Promise.all([
                     tautulli.call("get_item_watch_time_stats", { rating_key: key, query_days: "1,7,30,0" }),
                     tautulli.call("get_item_user_stats", { rating_key: key }),
-                    tautulli.call("get_history", { [kind === "series" ? "grandparent_rating_key" : "rating_key"]: key, length: 10 }),
-                    kind === "series"
-                        ? tautulli.call("get_library_media_info", { section_id: entry.sectionId, rating_key: key, length: 500 })
-                        : Promise.resolve({ data: [] }),
+                    tautulli.call("get_history", kind === "series" ? { grandparent_rating_key: key, length: 20_000 } : { rating_key: key, length: 10 }, { timeoutMs: 30_000 }),
                 ]);
+                const seasons = new Map();
+                if (kind === "series") {
+                    for (const row of history.data ?? []) {
+                        if (row.media_type !== "episode")
+                            continue;
+                        const n = num(row.parent_media_index);
+                        const season = seasons.get(n) ?? { plays: 0, lastPlayed: 0 };
+                        season.plays++;
+                        season.lastPlayed = Math.max(season.lastPlayed, num(row.date));
+                        seasons.set(n, season);
+                    }
+                }
                 const all = (windows ?? []).find((row) => row.query_days === 0);
                 return {
                     ok: true,
@@ -269,10 +257,10 @@ export function createWatchService(tautulli) {
                         .map((row) => ({ name: text(row.friendly_name, 128) ?? text(row.username, 128) ?? "Unknown", plays: num(row.total_plays), seconds: num(row.total_time) }))
                         .sort((a, b) => b.plays - a.plays)
                         .slice(0, 10),
-                    seasons: (seasons.data ?? [])
-                        .filter((row) => row.media_index !== "" && row.media_index !== undefined)
-                        .map((row) => ({ seasonNumber: num(row.media_index), plays: num(row.play_count), lastPlayed: iso(num(row.last_played)) }))
-                        .slice(0, 200),
+                    seasons: [...seasons.entries()]
+                        .sort(([a], [b]) => a - b)
+                        .slice(0, 200)
+                        .map(([seasonNumber, season]) => ({ seasonNumber, plays: season.plays, lastPlayed: iso(season.lastPlayed) })),
                     recent: (history.data ?? []).slice(0, 10).map((row) => {
                         const episode = row.media_type === "episode";
                         return {

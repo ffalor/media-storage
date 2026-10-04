@@ -1,6 +1,7 @@
 import { SEASON_FILES_PAGE, TOP_MAX } from "../contract.js";
 import { ArrError, mapLimit, toServiceError, TtlCache } from "./arr.js";
 import { toWatch } from "./tautulli.js";
+import { requesters, seasonRequester } from "./seerr.js";
 // ---- Helpers -----------------------------------------------------------------------------
 /** Library snapshots older than this are served immediately and rebuilt in the background. */
 export const STALE_AFTER = 10 * 60_000;
@@ -136,8 +137,12 @@ export function createMediaService(deps) {
                 };
             });
             const backdrops = new Map();
+            const ext = new Map();
+            const seasonBytes = new Map();
             const items = series.map((entry, index) => {
                 backdrops.set(entry.id, art.cover("sonarr", image(entry.images, "fanart"), "fanart"));
+                ext.set(entry.id, { tvdbId: int(entry.tvdbId), tmdbId: int(entry.tmdbId) });
+                seasonBytes.set(entry.id, (entry.seasons ?? []).map((season) => [season.seasonNumber, int(season.statistics?.sizeOnDisk)]).filter(([, bytes]) => bytes > 0));
                 return {
                     id: entry.id,
                     title: str(entry.title) ?? `Series ${entry.id}`,
@@ -149,6 +154,7 @@ export function createMediaService(deps) {
                     network: str(entry.network, 128),
                     poster: art.cover("sonarr", image(entry.images, "poster"), "poster-500"),
                     watch: null,
+                    requestedBy: null,
                 };
             });
             items.sort((a, b) => b.sizeBytes - a.sizeBytes || a.title.localeCompare(b.title));
@@ -157,6 +163,8 @@ export function createMediaService(deps) {
                 retrievedAt: nowIso(),
                 items,
                 backdrops,
+                ext,
+                seasonBytes,
                 sizeBytes: items.reduce((total, item) => total + item.sizeBytes, 0),
                 fileCount: items.reduce((total, item) => total + item.fileCount, 0),
             };
@@ -166,8 +174,10 @@ export function createMediaService(deps) {
         {
             const movies = await radarr.json("/movie", { timeoutMs: 30_000 });
             const backdrops = new Map();
+            const tmdb = new Map();
             const items = movies.map((movie) => {
                 backdrops.set(movie.id, art.cover("radarr", image(movie.images, "fanart"), "fanart"));
+                tmdb.set(movie.id, int(movie.tmdbId));
                 const file = movie.movieFile;
                 return {
                     id: movie.id,
@@ -180,6 +190,7 @@ export function createMediaService(deps) {
                     videoCodec: str(file?.mediaInfo?.videoCodec, 64),
                     poster: art.cover("radarr", image(movie.images, "poster"), "poster-500"),
                     watch: null,
+                    requestedBy: null,
                 };
             });
             items.sort((a, b) => b.sizeBytes - a.sizeBytes || a.title.localeCompare(b.title));
@@ -188,6 +199,7 @@ export function createMediaService(deps) {
                 retrievedAt: nowIso(),
                 items,
                 backdrops,
+                tmdb,
                 sizeBytes: items.reduce((total, item) => total + item.sizeBytes, 0),
                 fileCount: items.filter((item) => item.hasFile).length,
             };
@@ -197,13 +209,81 @@ export function createMediaService(deps) {
     const movieSnapshot = new Snapshot(loadMovieLibrary, () => deps.onLibraryUpdated?.({ library: "movies", retrievedAt: nowIso() }));
     const tvLibrary = (force = false) => tvSnapshot.get(force);
     const movieLibrary = (force = false) => movieSnapshot.get(force);
-    /** Attach Tautulli play counts to library items. Watch data is looked up per read so it refreshes independently. */
-    async function withWatch(kind, items) {
-        const index = await deps.watch?.index();
-        if (!index)
+    /** Accepted Seerr requests for a library item, oldest first. */
+    function requestsOf(idx, library, id) {
+        const requests = deps.requests;
+        if ("ext" in library)
+            return requests.seriesRequests(idx, library.ext.get(id) ?? { tvdbId: 0, tmdbId: 0 });
+        return requests.movieRequests(idx, library.tmdb.get(id) ?? 0);
+    }
+    const names = (requests) => {
+        const list = requesters(requests);
+        return list.length ? list.slice(0, 10) : null;
+    };
+    /**
+     * Attach Tautulli play counts and Seerr requesters to library items. Both are looked up per read
+     * so they refresh independently of the library snapshot.
+     */
+    async function decorate(kind, library, items) {
+        const [watchIdx, requestIdx] = await Promise.all([deps.watch?.index() ?? null, deps.requests?.index() ?? null]);
+        if (!watchIdx && !requestIdx)
             return items;
-        const lookup = index[kind];
-        return items.map((item) => ({ ...item, watch: toWatch(lookup(item.title, item.year)) }));
+        return items.map((item) => ({
+            ...item,
+            watch: watchIdx ? toWatch(watchIdx[kind](item.title, item.year)) : null,
+            requestedBy: requestIdx ? names(requestsOf(requestIdx, library, item.id)) : null,
+        }));
+    }
+    /** Split each title's bytes between requesters (series by season) and total them per user. */
+    function requestTotals(idx, tv, movies, watchIdx) {
+        const users = new Map();
+        let notRequestedBytes = 0;
+        const credit = (user, key, bytes, never) => {
+            if (!bytes)
+                return;
+            if (!user) {
+                notRequestedBytes += bytes;
+                return;
+            }
+            const entry = users.get(user) ?? { sizeBytes: 0, items: new Set(), neverWatchedBytes: 0 };
+            entry.sizeBytes += bytes;
+            entry.items.add(key);
+            if (never)
+                entry.neverWatchedBytes += bytes;
+            users.set(user, entry);
+        };
+        for (const item of tv?.items ?? []) {
+            if (!item.sizeBytes)
+                continue;
+            const requests = requestsOf(idx, tv, item.id);
+            const never = watchIdx?.tv(item.title, item.year)?.plays === 0;
+            const seasons = tv.seasonBytes.get(item.id) ?? [];
+            const statTotal = seasons.reduce((sum, [, bytes]) => sum + bytes, 0);
+            if (!requests.length || !statTotal) {
+                credit(requests[0]?.user ?? null, `tv:${item.id}`, item.sizeBytes, never);
+                continue;
+            }
+            // Season shares come from Sonarr's statistics; scale them to the exact series total.
+            let assigned = 0;
+            seasons.forEach(([season, bytes], index) => {
+                const share = index === seasons.length - 1 ? item.sizeBytes - assigned : Math.round((item.sizeBytes * bytes) / statTotal);
+                assigned += share;
+                credit(seasonRequester(requests, season)?.user ?? null, `tv:${item.id}`, share, never);
+            });
+        }
+        for (const item of movies?.items ?? []) {
+            if (!item.sizeBytes)
+                continue;
+            const requests = requestsOf(idx, movies, item.id);
+            credit(requests[0]?.user ?? null, `movie:${item.id}`, item.sizeBytes, watchIdx?.movies(item.title, item.year)?.plays === 0);
+        }
+        return {
+            users: [...users.entries()]
+                .map(([name, entry]) => ({ name, sizeBytes: entry.sizeBytes, items: entry.items.size, neverWatchedBytes: watchIdx ? entry.neverWatchedBytes : null }))
+                .sort((a, b) => b.sizeBytes - a.sizeBytes)
+                .slice(0, 200),
+            notRequestedBytes,
+        };
     }
     function status(client, force) {
         return cache.get(`status:${client.service}`, STATUS_TTL, async () => {
@@ -273,13 +353,14 @@ export function createMediaService(deps) {
         async overview(refresh) {
             if (refresh)
                 cache.clear();
-            const [sonarrStatus, radarrStatus, tv, movies, index] = await Promise.all([
+            const [sonarrStatus, radarrStatus, tv, movies, index, requestIdx] = await Promise.all([
                 status(sonarr, refresh),
                 status(radarr, refresh),
                 tvLibrary(refresh).then((value) => ({ ok: true, value }), (error) => fail("sonarr", error)),
                 movieLibrary(refresh).then((value) => ({ ok: true, value }), (error) => fail("radarr", error)),
                 // Load the Tautulli index alongside the libraries; failures resolve to null.
                 deps.watch?.index(refresh) ?? Promise.resolve(null),
+                deps.requests?.index(refresh) ?? Promise.resolve(null),
             ]);
             const totals = (state, lib, countFiles, kind) => {
                 const library = lib.ok ? lib.value : null;
@@ -295,6 +376,7 @@ export function createMediaService(deps) {
                     poster: item.poster,
                     backdrop: library?.backdrops.get(item.id) ?? null,
                     watch: index ? toWatch(index[kind](item.title, item.year)) : null,
+                    requestedBy: requestIdx && library ? names(requestsOf(requestIdx, library, item.id)) : null,
                 }));
                 return {
                     status: effective,
@@ -321,6 +403,11 @@ export function createMediaService(deps) {
                 combinedBytes: tvTotals.sizeBytes + movieTotals.sizeBytes,
                 complete: tv.ok && movies.ok,
                 watch,
+                requests: !deps.requests?.configured()
+                    ? null
+                    : requestIdx
+                        ? { status: { state: "ok", version: requestIdx.version, error: null }, ...requestTotals(requestIdx, tv.ok ? tv.value : null, movies.ok ? movies.value : null, index) }
+                        : { status: { state: "error", version: null, error: toServiceError("seerr", deps.requests.error()) }, users: [], notRequestedBytes: 0 },
             };
         },
         async seriesPage(input) {
@@ -335,7 +422,7 @@ export function createMediaService(deps) {
                     retrievedAt: library.retrievedAt,
                     total: library.items.length,
                     offset: input.offset,
-                    items: await withWatch("tv", library.items.slice(input.offset, input.offset + input.limit)),
+                    items: await decorate("tv", library, library.items.slice(input.offset, input.offset + input.limit)),
                 };
             }
             catch (error) {
@@ -354,7 +441,7 @@ export function createMediaService(deps) {
                     retrievedAt: library.retrievedAt,
                     total: library.items.length,
                     offset: input.offset,
-                    items: await withWatch("movies", library.items.slice(input.offset, input.offset + input.limit)),
+                    items: await decorate("movies", library, library.items.slice(input.offset, input.offset + input.limit)),
                 };
             }
             catch (error) {
@@ -490,6 +577,42 @@ export function createMediaService(deps) {
             }
             catch (error) {
                 return fail(error instanceof ArrError ? error.service : "tautulli", error);
+            }
+        },
+        async requestDetail(kind, id) {
+            const requests = deps.requests;
+            if (!requests?.configured())
+                return { ok: true, state: "not_configured", webUrl: null, requests: [] };
+            try {
+                const idx = await requests.index();
+                if (!idx)
+                    throw requests.error();
+                let list;
+                let tmdbId;
+                if (kind === "series") {
+                    const library = await tvLibrary();
+                    let ids = library.ext.get(id);
+                    if (!ids) {
+                        const raw = await sonarr.json(`/series/${id}`);
+                        ids = { tvdbId: int(raw.tvdbId), tmdbId: int(raw.tmdbId) };
+                    }
+                    list = requests.seriesRequests(idx, ids);
+                    tmdbId = ids.tmdbId || (list[0]?.tmdbId ?? 0);
+                }
+                else {
+                    const library = await movieLibrary();
+                    tmdbId = library.tmdb.get(id) ?? int((await radarr.json(`/movie/${id}`)).tmdbId);
+                    list = requests.movieRequests(idx, tmdbId);
+                }
+                return {
+                    ok: true,
+                    state: list.length ? "ok" : "none",
+                    webUrl: requests.webUrl(kind === "series" ? "tv" : "movie", tmdbId),
+                    requests: list.slice(0, 50).map((request) => ({ user: request.user, at: request.at, seasons: request.seasons.slice(0, 200) })),
+                };
+            }
+            catch (error) {
+                return fail(error instanceof ArrError ? error.service : "seerr", error);
             }
         },
         async movieDetail(movieId) {

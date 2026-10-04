@@ -114,14 +114,17 @@ export class MediaStorageApp {
         if (route.view === "series") {
             void this.store.loadSeries(route.seriesId);
             void this.store.loadWatch("series", route.seriesId);
+            void this.store.loadRequests("series", route.seriesId);
         }
         if (route.view === "season") {
             void this.store.loadSeries(route.seriesId);
             void this.store.loadSeason(route.seriesId, route.season);
+            void this.store.loadRequests("series", route.seriesId);
         }
         if (route.view === "movie") {
             void this.store.loadMovie(route.movieId);
             void this.store.loadWatch("movie", route.movieId);
+            void this.store.loadRequests("movie", route.movieId);
         }
     }
     go(route) {
@@ -200,13 +203,13 @@ export class MediaStorageApp {
         const refreshing = this.store.refreshing || overview.status === "loading";
         const refresh = h("button", { class: `ms-btn ms-btn--quiet${refreshing ? " is-busy" : ""}`, type: "button", "aria-label": "Refresh from Sonarr and Radarr", disabled: refreshing }, icon("refresh"), h("span", { class: "ms-btn__label" }, refreshing ? "Refreshing" : "Refresh"));
         refresh.addEventListener("click", () => void this.store.load(true));
-        this.header.replaceChildren(h("div", { class: "ms-header__row" }, h("div", { class: "ms-brand" }, h("h1", { class: "ms-brand__title" }, "Media Storage")), h("div", { class: "ms-header__status" }, h("span", { class: "ms-svcs" }, service("Sonarr", data?.tv.status), service("Radarr", data?.movies.status), data?.watch ? service("Tautulli", { ...data.watch.status, healthIssues: 0 }) : null), h("span", { class: "ms-updated", "data-ms-updated": "", "aria-live": "polite" }, data ? `Updated ${fmtRelative(data.retrievedAt)}` : ""), refresh)), h("nav", { class: "ms-tabs", "aria-label": "Media Storage sections" }, tab("overview", "Overview", { view: "overview" }), tab("tv", "TV", { view: "tv" }), tab("movies", "Movies", { view: "movies" })));
+        this.header.replaceChildren(h("div", { class: "ms-header__row" }, h("div", { class: "ms-brand" }, h("h1", { class: "ms-brand__title" }, "Media Storage")), h("div", { class: "ms-header__status" }, h("span", { class: "ms-svcs" }, service("Sonarr", data?.tv.status), service("Radarr", data?.movies.status), data?.watch ? service("Tautulli", { ...data.watch.status, healthIssues: 0 }) : null, data?.requests ? service("Seerr", { ...data.requests.status, healthIssues: 0 }) : null), h("span", { class: "ms-updated", "data-ms-updated": "", "aria-live": "polite" }, data ? `Updated ${fmtRelative(data.retrievedAt)}` : ""), refresh)), h("nav", { class: "ms-tabs", "aria-label": "Media Storage sections" }, tab("overview", "Overview", { view: "overview" }), tab("tv", "TV", { view: "tv" }), tab("movies", "Movies", { view: "movies" })));
     }
     heading(text, cls = "ms-h2") {
         return h("h2", { class: cls, tabindex: "-1", "data-ms-heading": "" }, text);
     }
     errorState(error, retry, compact = false) {
-        const name = { sonarr: "Sonarr", radarr: "Radarr", tautulli: "Tautulli" }[error.service];
+        const name = { sonarr: "Sonarr", radarr: "Radarr", tautulli: "Tautulli", seerr: "Seerr" }[error.service];
         const title = error.code === "not_found"
             ? "Not found"
             : error.code === "unauthorized"
@@ -242,6 +245,8 @@ export class MediaStorageApp {
         // Watch stats appear only when Tautulli is configured and answering; its failures show in the header only.
         if (data.watch?.status.state === "ok")
             view.append(this.watchOverview(data.watch, data));
+        if (data.requests?.status.state === "ok")
+            view.append(requestOverview(data.requests, data.combinedBytes));
         const ranks = h("div", { class: "ms-ranks" });
         const drawRanks = () => ranks.replaceChildren(this.rankList("Top series", data.tv, "tv"), this.rankList("Top movies", data.movies, "movie", control));
         const control = this.topCountControl(drawRanks);
@@ -301,7 +306,7 @@ export class MediaStorageApp {
             .filter((item) => item.sizeBytes > 0)
             .sort((a, b) => b.sizeBytes - a.sizeBytes)
             .slice(0, n)
-            .map((item) => ({ id: item.id, title: item.title, year: item.year, sizeBytes: item.sizeBytes, poster: item.poster, watch: item.watch }));
+            .map((item) => ({ id: item.id, title: item.title, year: item.year, sizeBytes: item.sizeBytes, poster: item.poster, watch: item.watch, requestedBy: item.requestedBy }));
     }
     overviewHero(data) {
         const total = bytesParts(data.combinedBytes);
@@ -338,7 +343,7 @@ export class MediaStorageApp {
         const list = h("ol", { class: "ms-rank__list" });
         top.forEach((item, index) => {
             const route = kind === "tv" ? { view: "series", seriesId: item.id } : { view: "movie", movieId: item.id };
-            list.append(h("li", null, this.link(route, { class: "ms-rank__row" }, h("span", { class: "ms-rank__n" }, String(index + 1)), artwork(item.poster, item.title, "ms-rank__poster"), h("span", { class: "ms-rank__body" }, h("span", { class: "ms-rank__title" }, item.title, item.year ? h("span", { class: "ms-rank__year" }, ` ${item.year}`) : null), watchLine(item.watch)), h("span", { class: "ms-rank__size" }, sizeBlock(item.sizeBytes, "ms-size ms-size--row"), sharePct(item.sizeBytes, totals.sizeBytes)))));
+            list.append(h("li", null, this.link(route, { class: "ms-rank__row" }, h("span", { class: "ms-rank__n" }, String(index + 1)), artwork(item.poster, item.title, "ms-rank__poster"), h("span", { class: "ms-rank__body" }, h("span", { class: "ms-rank__title" }, item.title, item.year ? h("span", { class: "ms-rank__year" }, ` ${item.year}`) : null), itemMeta(item.watch, item.requestedBy)), h("span", { class: "ms-rank__size" }, sizeBlock(item.sizeBytes, "ms-size ms-size--row"), sharePct(item.sizeBytes, totals.sizeBytes)))));
         });
         if (top.length)
             wrap.append(stackBar(top, totals.sizeBytes, kind, kind === "tv" ? "TV" : "movies"));
@@ -358,25 +363,7 @@ export class MediaStorageApp {
         const cell = (label, bytes, note, warn = false) => h("div", { class: `ms-why__cell${warn ? " is-warn" : ""}` }, h("dt", null, label), h("dd", { title: exactBytes(bytes) }, fmtBytes(bytes), h("span", { class: "ms-why__note" }, note)));
         const idle = data.combinedBytes ? ((neverBytes + staleBytes) / data.combinedBytes) * 100 : 0;
         const unmatched = sum((t) => t.unmatched);
-        const popular = (title, rows, kind) => {
-            if (!rows)
-                return null;
-            const list = h("ol", { class: "ms-rank__list" });
-            rows.forEach((row, index) => {
-                const content = [
-                    h("span", { class: "ms-rank__n" }, String(index + 1)),
-                    artwork(row.poster, row.title, "ms-rank__poster"),
-                    h("span", { class: "ms-rank__body" }, h("span", { class: "ms-rank__title" }, row.title), h("span", { class: "ms-watch" }, `${fmtInt(row.plays)} ${row.plays === 1 ? "play" : "plays"} · ${fmtInt(row.users)} ${row.users === 1 ? "user" : "users"}${row.lastPlayed ? ` · ${fmtAgo(row.lastPlayed)}` : ""}`)),
-                    h("span", { class: "ms-rank__size" }, row.sizeBytes !== null ? sizeBlock(row.sizeBytes, "ms-size ms-size--row") : h("span", { class: "ms-pct" }, "Not in library")),
-                ];
-                const route = row.id === null ? null : kind === "tv" ? { view: "series", seriesId: row.id } : { view: "movie", movieId: row.id };
-                list.append(h("li", null, route ? this.link(route, { class: "ms-rank__row" }, ...content) : h("div", { class: "ms-rank__row" }, ...content)));
-            });
-            if (!rows.length)
-                list.append(h("li", { class: "ms-empty-line" }, "Nothing played in the last 30 days."));
-            return h("section", { class: "ms-rank" }, h("div", { class: "ms-rank__head" }, h("h3", { class: "ms-h3" }, title)), list);
-        };
-        return h("section", { class: "ms-section ms-watch-overview", "aria-labelledby": "ms-watch-h" }, h("div", { class: "ms-section__head" }, h("h3", { class: "ms-h3", id: "ms-watch-h" }, "Watch activity"), h("span", { class: "ms-pct" }, `From Tautulli${watch.status.version ? ` ${watch.status.version}` : ""}`)), h("dl", { class: "ms-why" }, cell("Never watched", neverBytes, counts((t) => t.neverWatched.count), true), cell(`Not watched in ${months} months`, staleBytes, counts((t) => t.stale.count)), h("div", { class: "ms-why__cell" }, h("dt", null, "Idle share of storage"), h("dd", null, `${idle.toFixed(1)}%`, h("span", { class: "ms-why__note" }, `never watched or idle ${months}+ months`)))), unmatched ? h("p", { class: "ms-pct ms-watch-note" }, `${fmtInt(unmatched)} ${unmatched === 1 ? "item" : "items"} with files could not be matched to Plex and are not counted.`) : null, h("div", { class: "ms-ranks" }, popular("Most watched series · 30 days", watch.tv?.popular, "tv"), popular("Most watched movies · 30 days", watch.movies?.popular, "movie")));
+        return h("section", { class: "ms-section ms-watch-overview", "aria-labelledby": "ms-watch-h" }, h("div", { class: "ms-section__head" }, h("h3", { class: "ms-h3", id: "ms-watch-h" }, "Watch activity"), h("span", { class: "ms-pct" }, `From Tautulli${watch.status.version ? ` ${watch.status.version}` : ""}`)), h("dl", { class: "ms-why" }, cell("Never watched", neverBytes, counts((t) => t.neverWatched.count), true), cell(`Not watched in ${months} months`, staleBytes, counts((t) => t.stale.count)), h("div", { class: "ms-why__cell" }, h("dt", null, "Idle share of storage"), h("dd", null, `${idle.toFixed(1)}%`, h("span", { class: "ms-why__note" }, `never watched or idle ${months}+ months`)))), unmatched ? h("p", { class: "ms-pct ms-watch-note" }, `${fmtInt(unmatched)} ${unmatched === 1 ? "item" : "items"} with files could not be matched to Plex and are not counted.`) : null);
     }
     overviewSkeleton() {
         return h("div", { class: "ms-skel-overview", "aria-busy": "true", "aria-label": "Loading storage overview" }, h("div", { class: "ms-hero-total" }, h("div", null, h("span", { class: "ms-skel ms-skel--eyebrow" }), h("span", { class: "ms-skel ms-skel--total" })), h("div", null, h("span", { class: "ms-skel ms-skel--bar" }), h("span", { class: "ms-skel ms-skel--line" })), h("div", { class: "ms-stats" }, ...Array.from({ length: 4 }, () => h("span", { class: "ms-skel ms-skel--stat" })))), h("div", { class: "ms-features" }, h("span", { class: "ms-skel ms-skel--feature" }), h("span", { class: "ms-skel ms-skel--feature" })));
@@ -523,6 +510,7 @@ export class MediaStorageApp {
         const data = "data" in res ? res.data : undefined;
         const title = data?.title ?? summary?.title ?? "Series";
         const watch = this.watchFor("series", seriesId);
+        const requests = this.requestsFor("series", seriesId);
         const view = h("article", { class: "ms-detail" });
         view.append(this.crumbs(["TV", { view: "tv" }], [title, null]));
         view.append(this.hero({
@@ -533,8 +521,9 @@ export class MediaStorageApp {
             sizeBytes: data?.sizeBytes ?? summary?.sizeBytes ?? null,
             facts: data ? [[fmtInt(data.seasonCount), data.seasonCount === 1 ? "season" : "seasons"], [fmtInt(data.fileCount), data.fileCount === 1 ? "file" : "files"]] : summary ? [[fmtInt(summary.seasonCount), "seasons"], [fmtInt(summary.fileCount), "files"]] : [],
             overview: data?.overview ?? null,
-            links: [data?.webUrl ? { href: data.webUrl, service: "Sonarr" } : null, watch?.webUrl ? { href: watch.webUrl, service: "Tautulli" } : null],
+            links: [data?.webUrl ? { href: data.webUrl, service: "Sonarr" } : null, watch?.webUrl ? { href: watch.webUrl, service: "Tautulli" } : null, requests?.webUrl ? { href: requests.webUrl, service: "Seerr" } : null],
             watch,
+            requested: requestLine(requests?.requests ?? []),
             kind: "tv",
         }));
         if (res.status === "error") {
@@ -555,7 +544,7 @@ export class MediaStorageApp {
             const meta = empty ? `Nothing on disk · ${season.totalEpisodes} ${season.totalEpisodes === 1 ? "episode" : "episodes"}` : `${fmtInt(season.fileCount)} ${season.fileCount === 1 ? "file" : "files"} · ${season.episodeFileCount}/${season.totalEpisodes} episodes`;
             const content = [
                 artwork(season.artwork ?? data.backdrop, `${season.label} artwork`, "ms-season__art", { fallback: season.seasonNumber === 0 ? "SP" : String(season.seasonNumber) }),
-                h("span", { class: "ms-season__body" }, h("span", { class: "ms-season__name" }, season.label), h("span", { class: "ms-season__size" }, sizeBlock(season.sizeBytes), sharePct(season.sizeBytes, data.sizeBytes)), h("span", { class: "ms-season__meta" }, meta), watch && !empty ? watchLine(played ? { plays: played.plays, lastPlayed: played.lastPlayed } : { plays: 0, lastPlayed: null }, "ms-season__meta") : null),
+                h("span", { class: "ms-season__body" }, h("span", { class: "ms-season__name" }, season.label), h("span", { class: "ms-season__size" }, sizeBlock(season.sizeBytes), sharePct(season.sizeBytes, data.sizeBytes)), h("span", { class: "ms-season__meta" }, meta), watch && !empty ? watchLine(played ? { plays: played.plays, lastPlayed: played.lastPlayed } : { plays: 0, lastPlayed: null }, "ms-season__meta") : null, requests && !empty ? requestedTag(seasonRequest(requests.requests, season.seasonNumber)?.user ?? null, "ms-season__meta") : null),
             ];
             grid.append(h("li", null, empty
                 ? h("div", { class: "ms-season is-empty", "aria-label": `${season.label}: nothing on disk` }, ...content)
@@ -578,7 +567,11 @@ export class MediaStorageApp {
         const view = h("article", { class: "ms-detail ms-season-view" });
         view.append(this.crumbs(["TV", { view: "tv" }], [seriesTitle, { view: "series", seriesId }], [label, null]));
         const seasonInfo = seriesData?.seasons.find((s) => s.seasonNumber === seasonNumber);
-        const header = h("header", { class: "ms-season-head" }, artwork(seasonInfo?.artwork ?? data?.backdrop ?? seriesData?.backdrop ?? null, "", "ms-season-head__art", { eager: true, fallback: "" }), h("span", { class: "ms-season-head__scrim", "aria-hidden": "true" }), h("div", { class: "ms-season-head__text" }, h("p", { class: "ms-eyebrow" }, seriesTitle), h("h2", { class: "ms-h1", tabindex: "-1", "data-ms-heading": "" }, label), data ? h("p", { class: "ms-season-head__meta" }, sizeBlock(data.sizeBytes, "ms-size ms-size--lg"), h("span", null, `${fmtInt(data.total)} unique ${data.total === 1 ? "file" : "files"}`)) : h("span", { class: "ms-skel ms-skel--line" }), data?.webUrl ? serviceLink(data.webUrl, "Sonarr") : null));
+        const seasonReq = (() => {
+            const requests = this.requestsFor("series", seriesId);
+            return requests ? seasonRequest(requests.requests, seasonNumber) : null;
+        })();
+        const header = h("header", { class: "ms-season-head" }, artwork(seasonInfo?.artwork ?? data?.backdrop ?? seriesData?.backdrop ?? null, "", "ms-season-head__art", { eager: true, fallback: "" }), h("span", { class: "ms-season-head__scrim", "aria-hidden": "true" }), h("div", { class: "ms-season-head__text" }, h("p", { class: "ms-eyebrow" }, seriesTitle), h("h2", { class: "ms-h1", tabindex: "-1", "data-ms-heading": "" }, label), data ? h("p", { class: "ms-season-head__meta" }, sizeBlock(data.sizeBytes, "ms-size ms-size--lg"), h("span", null, `${fmtInt(data.total)} unique ${data.total === 1 ? "file" : "files"}`)) : h("span", { class: "ms-skel ms-skel--line" }), seasonReq ? requestLine([seasonReq], "ms-season-head__meta") : null, data?.webUrl ? serviceLink(data.webUrl, "Sonarr") : null));
         view.append(header);
         if (res.status === "error") {
             view.append(this.errorState(res.error, () => void this.store.loadSeason(seriesId, seasonNumber, true)));
@@ -641,6 +634,7 @@ export class MediaStorageApp {
         const data = "data" in res ? res.data : undefined;
         const title = data?.title ?? summary?.title ?? "Movie";
         const watch = this.watchFor("movie", movieId);
+        const requests = this.requestsFor("movie", movieId);
         const view = h("article", { class: "ms-detail" });
         view.append(this.crumbs(["Movies", { view: "movies" }], [title, null]));
         const spec = data?.file?.spec;
@@ -654,8 +648,9 @@ export class MediaStorageApp {
             sizeBytes: data ? (data.hasFile ? data.sizeBytes : null) : (summary?.sizeBytes ?? null),
             facts: spec ? [[resolutionLabel(spec.resolutionClass) ?? spec.resolution ?? "—", spec.quality ?? ""], [spec.videoCodec ?? "—", spec.dynamicRange ?? "video"]] : [],
             overview: data?.overview ?? null,
-            links: [data?.webUrl ? { href: data.webUrl, service: "Radarr" } : null, watch?.webUrl ? { href: watch.webUrl, service: "Tautulli" } : null],
+            links: [data?.webUrl ? { href: data.webUrl, service: "Radarr" } : null, watch?.webUrl ? { href: watch.webUrl, service: "Tautulli" } : null, requests?.webUrl ? { href: requests.webUrl, service: "Seerr" } : null],
             watch,
+            requested: requestLine(requests?.requests ?? []),
             kind: "movie",
         }));
         if (res.status === "error") {
@@ -701,13 +696,19 @@ export class MediaStorageApp {
             ]
             : [];
         const links = opts.links.filter((link) => link !== null);
-        return h("header", { class: `ms-hero is-${opts.kind}` }, h("div", { class: "ms-hero__backdrop" }, artwork(opts.backdrop, "", "ms-hero__img", { eager: true, fallback: "" }), h("span", { class: "ms-hero__scrim", "aria-hidden": "true" })), h("div", { class: "ms-hero__content" }, artwork(opts.poster, opts.title, "ms-hero__poster", { eager: true }), h("div", { class: "ms-hero__text" }, h("h2", { class: "ms-h1", tabindex: "-1", "data-ms-heading": "" }, opts.title), h("p", { class: "ms-hero__meta" }, opts.meta.filter(Boolean).join(" · ")), h("div", { class: "ms-hero__figures" }, opts.sizeBytes !== null ? sizeBlock(opts.sizeBytes, "ms-size ms-size--xl") : h("span", { class: "ms-skel ms-skel--size" }), ...opts.facts.map(([value, label]) => h("span", { class: "ms-fact" }, h("strong", null, value), label ? ` ${label}` : ""))), watchFacts.length ? h("div", { class: "ms-hero__figures ms-hero__watch", "aria-label": "Watch stats from Tautulli" }, ...watchFacts.map(([value, label]) => h("span", { class: "ms-fact" }, h("strong", null, value), ` ${label}`))) : null, opts.overview ? h("p", { class: "ms-hero__overview" }, opts.overview) : null, links.length ? h("div", { class: "ms-hero__links" }, ...links.map((link) => serviceLink(link.href, link.service))) : null)));
+        return h("header", { class: `ms-hero is-${opts.kind}` }, h("div", { class: "ms-hero__backdrop" }, artwork(opts.backdrop, "", "ms-hero__img", { eager: true, fallback: "" }), h("span", { class: "ms-hero__scrim", "aria-hidden": "true" })), h("div", { class: "ms-hero__content" }, artwork(opts.poster, opts.title, "ms-hero__poster", { eager: true }), h("div", { class: "ms-hero__text" }, h("h2", { class: "ms-h1", tabindex: "-1", "data-ms-heading": "" }, opts.title), h("p", { class: "ms-hero__meta" }, opts.meta.filter(Boolean).join(" · ")), h("div", { class: "ms-hero__figures" }, opts.sizeBytes !== null ? sizeBlock(opts.sizeBytes, "ms-size ms-size--xl") : h("span", { class: "ms-skel ms-skel--size" }), ...opts.facts.map(([value, label]) => h("span", { class: "ms-fact" }, h("strong", null, value), label ? ` ${label}` : ""))), watchFacts.length ? h("div", { class: "ms-hero__figures ms-hero__watch", "aria-label": "Watch stats from Tautulli" }, ...watchFacts.map(([value, label]) => h("span", { class: "ms-fact" }, h("strong", null, value), ` ${label}`))) : null, opts.requested ?? null, opts.overview ? h("p", { class: "ms-hero__overview" }, opts.overview) : null, links.length ? h("div", { class: "ms-hero__links" }, ...links.map((link) => serviceLink(link.href, link.service))) : null)));
     }
     /** Matched Tautulli stats for an item, or null while loading, unconfigured, unmatched, or failing. */
     watchFor(kind, id) {
         const res = this.store.watchDetail.get(`${kind}:${id}`);
         const data = res && "data" in res ? res.data : undefined;
         return data?.state === "ok" ? data : null;
+    }
+    /** Seerr requests for an item, or null while loading, unconfigured, or failing. Unrequested items keep their Seerr link. */
+    requestsFor(kind, id) {
+        const res = this.store.requestDetail.get(`${kind}:${id}`);
+        const data = res && "data" in res ? res.data : undefined;
+        return data && data.state !== "not_configured" ? data : null;
     }
     watchSection(watch, kind) {
         const label = (days) => (days === 0 ? "All time" : days === 1 ? "Last 24 hours" : `Last ${days} days`);
@@ -747,6 +748,57 @@ function watchLine(watch, cls = "ms-watch") {
     if (!watch.plays)
         return h("span", { class: `${cls} ms-watch is-never` }, "Never watched");
     return h("span", { class: `${cls} ms-watch`, title: fmtDate(watch.lastPlayed) ?? "" }, `${fmtInt(watch.plays)} ${watch.plays === 1 ? "play" : "plays"}${watch.lastPlayed ? ` · ${fmtAgo(watch.lastPlayed)}` : ""}`);
+}
+/** Play count and requesters on one muted line, for list rows. */
+function itemMeta(watch, requestedBy) {
+    const play = watchLine(watch);
+    const req = requestedBy?.length ? h("span", { class: "ms-req" }, `Requested by ${requestedBy.slice(0, 2).join(", ")}${requestedBy.length > 2 ? ` +${requestedBy.length - 2}` : ""}`) : null;
+    if (!play && !req)
+        return null;
+    return h("span", { class: "ms-meta-line" }, play, play && req ? h("span", { class: "ms-meta-line__sep", "aria-hidden": "true" }, "·") : null, req);
+}
+/** The request a season is attributed to: the first that names it, else the series' first request. */
+function seasonRequest(requests, seasonNumber) {
+    return requests.find((r) => r.seasons.includes(seasonNumber)) ?? requests[0] ?? null;
+}
+/** "Requested by X · Mar 3, 2026", plus later requesters. Null when nothing was requested. */
+function requestLine(requests, cls = "ms-hero__requested") {
+    const first = requests[0];
+    if (!first)
+        return null;
+    const others = [...new Set(requests.map((r) => r.user))].filter((user) => user !== first.user);
+    return h("p", { class: cls }, "Requested by ", h("strong", null, first.user), ` · ${fmtDate(first.at) ?? ""}`, others.length ? ` · also ${others.slice(0, 3).join(", ")}${others.length > 3 ? ` +${others.length - 3}` : ""}` : "");
+}
+function requestedTag(user, cls) {
+    return user ? h("span", { class: `${cls} ms-req` }, `Requested by ${user}`) : null;
+}
+const USER_COLORS = 8;
+/** One bar of storage split by requester, then everything nobody requested. */
+function requestOverview(req, total) {
+    const pct = (bytes) => (total > 0 ? (bytes / total) * 100 : 0);
+    const fmtPct = (bytes) => {
+        const p = pct(bytes);
+        return p > 0 && p < 0.1 ? "<0.1%" : `${p.toFixed(1)}%`;
+    };
+    const requested = req.users.reduce((sum, user) => sum + user.sizeBytes, 0);
+    const bar = h("div", { class: "ms-stack__bar ms-users__bar", role: "img", "aria-label": `Requested content uses ${fmtPct(requested)} of storage` });
+    const color = (index) => `is-u${Math.min(index, USER_COLORS - 1)}`;
+    const shown = req.users.slice(0, USER_COLORS - 1);
+    const rest = req.users.slice(USER_COLORS - 1);
+    const restBytes = rest.reduce((sum, user) => sum + user.sizeBytes, 0);
+    const segment = (cls, bytes, title) => {
+        const seg = h("span", { class: `ms-users__seg ${cls}`, title: `${title} · ${fmtBytes(bytes)} · ${fmtPct(bytes)}` });
+        seg.style.width = `${pct(bytes).toFixed(3)}%`;
+        return seg;
+    };
+    shown.forEach((user, index) => bar.append(segment(color(index), user.sizeBytes, user.name)));
+    if (restBytes)
+        bar.append(segment(color(USER_COLORS - 1), restBytes, `${rest.length} more`));
+    if (req.notRequestedBytes)
+        bar.append(segment("is-rest", req.notRequestedBytes, "Not requested"));
+    const legendRow = (cls, name, bytes, detail, never) => h("li", { class: "ms-users__row" }, h("i", { class: `ms-users__key ${cls}`, "aria-hidden": "true" }), h("span", { class: "ms-users__name" }, name), h("span", { class: "ms-users__detail" }, [detail, never ? `${fmtBytes(never)} never watched` : null].filter(Boolean).join(" · ")), h("span", { class: "ms-users__size", title: exactBytes(bytes) }, fmtBytes(bytes)), h("span", { class: "ms-pct" }, fmtPct(bytes)));
+    const titles = (n) => `${fmtInt(n)} ${n === 1 ? "title" : "titles"}`;
+    return h("section", { class: "ms-section", "aria-labelledby": "ms-req-h" }, h("div", { class: "ms-section__head" }, h("h3", { class: "ms-h3", id: "ms-req-h" }, "Requested content by user"), h("span", { class: "ms-pct" }, `From Seerr${req.status.version ? ` ${req.status.version}` : ""}`)), h("div", { class: "ms-stack ms-users" }, h("div", { class: "ms-stack__head" }, h("span", null, "Requests account for ", h("strong", null, fmtPct(requested)), " of storage"), h("span", { class: "ms-stack__total" }, `${fmtBytes(requested)} of ${fmtBytes(total)}`)), bar, h("ol", { class: "ms-users__legend" }, ...req.users.map((user, index) => legendRow(color(index), user.name, user.sizeBytes, titles(user.items), user.neverWatchedBytes)), req.notRequestedBytes ? legendRow("is-rest", "Not requested", req.notRequestedBytes, "added in Sonarr/Radarr", null) : null)));
 }
 /** Share of the whole library, as muted text beside a size. */
 function sharePct(bytes, total) {

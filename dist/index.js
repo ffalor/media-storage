@@ -8,6 +8,7 @@ import { createArrClient } from "./backend/arr.js";
 import { ART_ROUTE, Artwork } from "./backend/artwork.js";
 import { createMediaService } from "./backend/service.js";
 import { createTautulliClient, createWatchService } from "./backend/tautulli.js";
+import { createRequestService, createSeerrClient } from "./backend/seerr.js";
 const PLUGIN_ID = "media-storage";
 const entry = defineFeaturePlugin({
     contract,
@@ -26,6 +27,7 @@ const entry = defineFeaturePlugin({
             radarr,
             art,
             watch: createWatchService(tautulli),
+            requests: createRequestService(createSeerrClient(resolveServiceUrl(api.pluginConfig, "seerr"), apiKey("seerr"))),
             logger: api.logger,
             onLibraryUpdated: (update) => {
                 try {
@@ -38,7 +40,7 @@ const entry = defineFeaturePlugin({
         });
         // Schema defaults are display-only and the Gateway resolves only SecretRefs saved in config, so
         // write the default references once when none are set. Users then only create the secrets.
-        const missingKeyRefs = ["sonarr", "radarr", "tautulli"].filter((service) => {
+        const missingKeyRefs = ["sonarr", "radarr", "tautulli", "seerr"].filter((service) => {
             const section = api.pluginConfig?.[service];
             return !(section && typeof section === "object" && "apiKey" in section);
         });
@@ -74,6 +76,7 @@ const entry = defineFeaturePlugin({
             movies: (input) => media.moviesPage({ ...input, limit: clampLimit(input.limit) }),
             "movie-detail": ({ movieId }) => media.movieDetail(movieId),
             "watch-detail": ({ kind, id }) => media.watchDetail(kind, id),
+            "request-detail": ({ kind, id }) => media.requestDetail(kind, id),
         };
     },
 });

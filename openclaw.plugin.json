@@ -2,7 +2,7 @@
   "id": "media-storage",
   "name": "Media Storage",
   "description": "Read-only storage analysis for Sonarr and Radarr libraries with a native Control UI page.",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
@@ -126,6 +126,46 @@
             }
           }
         }
+      },
+      "seerr": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "url": {
+            "type": "string",
+            "default": "http://localhost:5055/",
+            "description": "Seerr base URL."
+          },
+          "apiKey": {
+            "description": "Seerr API key as a SecretRef (for example a protected entry in Settings → Secrets).",
+            "type": "object",
+            "required": [
+              "source",
+              "id"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "source": {
+                "type": "string",
+                "enum": [
+                  "env",
+                  "file",
+                  "exec",
+                  "store"
+                ]
+              },
+              "provider": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_-]{0,63}$"
+              },
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              }
+            }
+          }
+        }
       }
     }
   },
@@ -168,6 +208,19 @@
     "tautulli.apiKey": {
       "label": "Tautulli API key secret",
       "help": "Which secret in Settings → Secrets holds the Tautulli API key. Set automatically to TAUTULLI_API_KEY; watch stats stay hidden until that secret exists. Find the key in Tautulli under Settings → Web Interface → API."
+    },
+    "seerr": {
+      "label": "Seerr (optional)",
+      "help": "Connection to Seerr (Overseerr/Jellyseerr) for who requested what."
+    },
+    "seerr.url": {
+      "label": "Seerr URL",
+      "help": "Address of your Seerr server as seen from the Gateway, for example http://seerr.local:5055/.",
+      "placeholder": "http://localhost:5055/"
+    },
+    "seerr.apiKey": {
+      "label": "Seerr API key secret",
+      "help": "Which secret in Settings → Secrets holds the Seerr API key. Set automatically to SEERR_API_KEY; request info stays hidden until that secret exists. Find the key in Seerr under Settings → General → API Key."
     }
   },
   "activation": {
@@ -178,9 +231,9 @@
     "navigation"
   ],
   "controlUi": {
-    "entry": "dist/control-ui/e22217347dd1cd2f9f5f3e5498466e51f966a1c89b97ec0af4075d771002117c/index.js",
+    "entry": "dist/control-ui/981ec51a1309f94a3bbf23693b681a771e9e1fb1838b12bae236376bb3b4623e/index.js",
     "styles": [
-      "dist/control-ui/e22217347dd1cd2f9f5f3e5498466e51f966a1c89b97ec0af4075d771002117c/index.css"
+      "dist/control-ui/981ec51a1309f94a3bbf23693b681a771e9e1fb1838b12bae236376bb3b4623e/index.css"
     ]
   },
   "configContracts": {
@@ -198,6 +251,11 @@
         },
         {
           "path": "tautulli.apiKey",
+          "expected": "string",
+          "ownerKind": "capability"
+        },
+        {
+          "path": "seerr.apiKey",
           "expected": "string",
           "ownerKind": "capability"
         }

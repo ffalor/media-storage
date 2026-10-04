@@ -20,7 +20,7 @@ const Art = Type.Union([Type.String({ maxLength: 2048, pattern: "^/media-storage
 /** Most top items the overview returns; the page lets the user show fewer. */
 export const TOP_MAX = 25;
 
-export const ServiceName = Type.Union([Type.Literal("sonarr"), Type.Literal("radarr"), Type.Literal("tautulli")]);
+export const ServiceName = Type.Union([Type.Literal("sonarr"), Type.Literal("radarr"), Type.Literal("tautulli"), Type.Literal("seerr")]);
 
 export const ServiceError = Type.Object(
   {
@@ -53,6 +53,8 @@ export const Watch = Type.Object(
   { additionalProperties: false },
 );
 const OptWatch = Type.Union([Watch, Type.Null()]);
+/** Seerr requester names, oldest request first; null when Seerr is not configured or nobody requested it. */
+const RequestedBy = Type.Union([Type.Array(Text(128), { maxItems: 10 }), Type.Null()]);
 
 const Failure = Type.Object({ ok: Type.Literal(false), error: ServiceError }, { additionalProperties: false });
 const result = <T extends TSchema>(ok: T) => Type.Union([ok, Failure]);
@@ -82,6 +84,7 @@ export const SeriesSummary = Type.Object(
     network: OptText(128),
     poster: Art,
     watch: OptWatch,
+    requestedBy: RequestedBy,
   },
   { additionalProperties: false },
 );
@@ -99,12 +102,13 @@ export const MovieSummary = Type.Object(
     videoCodec: OptText(64),
     poster: Art,
     watch: OptWatch,
+    requestedBy: RequestedBy,
   },
   { additionalProperties: false },
 );
 
 const Ranked = Type.Object(
-  { id: Id, title: Text(), year: Type.Integer({ minimum: 0, maximum: 3000 }), sizeBytes: Bytes, poster: Art, backdrop: Art, watch: OptWatch },
+  { id: Id, title: Text(), year: Type.Integer({ minimum: 0, maximum: 3000 }), sizeBytes: Bytes, poster: Art, backdrop: Art, watch: OptWatch, requestedBy: RequestedBy },
   { additionalProperties: false },
 );
 
@@ -120,6 +124,11 @@ const ServiceTotals = Type.Object(
   { additionalProperties: false },
 );
 
+const ExtStatus = Type.Object(
+  { state: Type.Union([Type.Literal("ok"), Type.Literal("error")]), version: OptText(64), error: Type.Union([ServiceError, Type.Null()]) },
+  { additionalProperties: false },
+);
+
 const UnwatchedBucket = Type.Object({ count: Count, sizeBytes: Bytes }, { additionalProperties: false });
 
 const WatchTotals = Type.Object(
@@ -131,36 +140,40 @@ const WatchTotals = Type.Object(
     neverWatched: UnwatchedBucket,
     /** Watched before, but not in the last STALE_DAYS days. */
     stale: UnwatchedBucket,
-    /** Most played in the last 30 days, from Tautulli's home stats. */
-    popular: Type.Array(
-      Type.Object(
-        {
-          /** Sonarr series id / Radarr movie id, null when the title is not in Sonarr/Radarr. */
-          id: Type.Union([Id, Type.Null()]),
-          title: Text(),
-          plays: Count,
-          users: Count,
-          lastPlayed: OptText(40),
-          sizeBytes: Type.Union([Bytes, Type.Null()]),
-          poster: Art,
-        },
-        { additionalProperties: false },
-      ),
-      { maxItems: 10 },
-    ),
   },
   { additionalProperties: false },
 );
 
 export const WatchOverview = Type.Object(
   {
-    status: Type.Object(
-      { state: Type.Union([Type.Literal("ok"), Type.Literal("error")]), version: OptText(64), error: Type.Union([ServiceError, Type.Null()]) },
-      { additionalProperties: false },
-    ),
+    status: ExtStatus,
     staleDays: Count,
     tv: Type.Union([WatchTotals, Type.Null()]),
     movies: Type.Union([WatchTotals, Type.Null()]),
+  },
+  { additionalProperties: false },
+);
+
+/** Storage on disk attributed to whoever requested it in Seerr. Series are split by season. */
+export const RequestOverview = Type.Object(
+  {
+    status: ExtStatus,
+    users: Type.Array(
+      Type.Object(
+        {
+          name: Text(128),
+          sizeBytes: Bytes,
+          /** Series and movies with files attributed to this user. */
+          items: Count,
+          /** Part of sizeBytes in titles Tautulli has never seen played; null without Tautulli. */
+          neverWatchedBytes: Type.Union([Bytes, Type.Null()]),
+        },
+        { additionalProperties: false },
+      ),
+      { maxItems: 200 },
+    ),
+    /** Storage with no accepted request (added in Sonarr/Radarr directly). */
+    notRequestedBytes: Bytes,
   },
   { additionalProperties: false },
 );
@@ -176,6 +189,8 @@ export const Overview = Type.Object(
     complete: Type.Boolean(),
     /** Tautulli watch stats; null when Tautulli is not configured. */
     watch: Type.Union([WatchOverview, Type.Null()]),
+    /** Seerr request breakdown; null when Seerr is not configured. */
+    requests: Type.Union([RequestOverview, Type.Null()]),
   },
   { additionalProperties: false },
 );
@@ -380,6 +395,28 @@ export const WatchDetail = Type.Object(
   { additionalProperties: false },
 );
 
+export const RequestDetail = Type.Object(
+  {
+    ok: Type.Literal(true),
+    /** not_configured: Seerr is not set up. none: no accepted request for this title. */
+    state: Type.Union([Type.Literal("ok"), Type.Literal("not_configured"), Type.Literal("none")]),
+    webUrl: OptText(2048),
+    requests: Type.Array(
+      Type.Object(
+        {
+          user: Text(128),
+          at: Text(40),
+          /** Requested seasons (series only). */
+          seasons: Type.Array(Type.Integer({ minimum: 0, maximum: 10000 }), { maxItems: 200 }),
+        },
+        { additionalProperties: false },
+      ),
+      { maxItems: 50 },
+    ),
+  },
+  { additionalProperties: false },
+);
+
 export const contract = defineFeatureContract({
   pluginId: "media-storage",
   operations: {
@@ -435,6 +472,15 @@ export const contract = defineFeatureContract({
       ),
       output: result(WatchDetail),
     },
+    "request-detail": {
+      kind: "query",
+      description: "Seerr requests for one series or movie, oldest first. Not configured or unrequested items return an empty result, not an error.",
+      input: Type.Object(
+        { kind: Type.Union([Type.Literal("series"), Type.Literal("movie")]), id: Id },
+        { additionalProperties: false },
+      ),
+      output: result(RequestDetail),
+    },
   },
   events: {
     /** A background rebuild replaced a library snapshot; clients should re-read it. */
@@ -460,6 +506,8 @@ export type ServiceNameT = Static<typeof ServiceName>;
 export type WatchT = Static<typeof Watch>;
 export type WatchOverviewT = Static<typeof WatchOverview>;
 export type WatchDetailT = Static<typeof WatchDetail>;
+export type RequestOverviewT = Static<typeof RequestOverview>;
+export type RequestDetailT = Static<typeof RequestDetail>;
 
 export const SEASON_FILES_PAGE = 60;
 export const LIBRARY_PAGE = 150;

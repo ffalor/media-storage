@@ -33,12 +33,14 @@ const service = (name: string, defaultUrl: string) =>
 export const DEFAULT_SONARR_URL = "http://localhost:8989/";
 export const DEFAULT_RADARR_URL = "http://localhost:7878/";
 export const DEFAULT_TAUTULLI_URL = "http://localhost:8181/";
+export const DEFAULT_SEERR_URL = "http://localhost:5055/";
 
 /** References written into config on first start when no `apiKey` is set. */
 export const DEFAULT_KEY_REFS = {
   sonarr: { source: "store", provider: "default", id: "SONARR_API_KEY" },
   radarr: { source: "store", provider: "default", id: "RADARR_API_KEY" },
   tautulli: { source: "store", provider: "default", id: "TAUTULLI_API_KEY" },
+  seerr: { source: "store", provider: "default", id: "SEERR_API_KEY" },
 } as const;
 
 export const CONFIG_JSON_SCHEMA = {
@@ -49,6 +51,8 @@ export const CONFIG_JSON_SCHEMA = {
     radarr: service("Radarr", DEFAULT_RADARR_URL),
     // Optional: watch stats are shown only when tautulli.apiKey resolves to a value.
     tautulli: service("Tautulli", DEFAULT_TAUTULLI_URL),
+    // Optional: request info is shown only when seerr.apiKey resolves to a value.
+    seerr: service("Seerr", DEFAULT_SEERR_URL),
   },
 };
 
@@ -63,9 +67,9 @@ function httpUrl(value: unknown, fallback: string) {
 }
 
 /** Read the service URL from plugin config. API keys are not read here; see `getPreparedPluginSecretInput`. */
-export function resolveServiceUrl(config: Record<string, unknown> | undefined, name: "sonarr" | "radarr" | "tautulli"): string {
+export function resolveServiceUrl(config: Record<string, unknown> | undefined, name: "sonarr" | "radarr" | "tautulli" | "seerr"): string {
   const section = config?.[name];
   const record = section && typeof section === "object" ? (section as Record<string, unknown>) : {};
-  const fallback = { sonarr: DEFAULT_SONARR_URL, radarr: DEFAULT_RADARR_URL, tautulli: DEFAULT_TAUTULLI_URL }[name];
+  const fallback = { sonarr: DEFAULT_SONARR_URL, radarr: DEFAULT_RADARR_URL, tautulli: DEFAULT_TAUTULLI_URL, seerr: DEFAULT_SEERR_URL }[name];
   return httpUrl(record.url, fallback);
 }
