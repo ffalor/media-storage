@@ -3,7 +3,7 @@
 A read-only [OpenClaw](https://docs.openclaw.ai) feature plugin that adds a native **Media Storage** page to the
 Control UI, showing how much storage your Sonarr and Radarr libraries use, down to individual files.
 
-![Media Storage overview](docs/overview.png)
+![Media Storage overview](https://raw.githubusercontent.com/ffalor/media-storage/main/docs/overview.png)
 
 - **Overview:** total, TV and movie storage, file counts, the largest series and movie, and the top consumers.
 - **TV:** poster grid with search and sorting, then series → seasons (including Specials) → individual files.
