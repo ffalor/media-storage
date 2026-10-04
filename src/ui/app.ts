@@ -25,10 +25,9 @@ import {
   h,
   icon,
   resolutionLabel,
-  shareBar,
   sizeBlock,
 } from "./dom.js";
-import type { Resource, Store } from "./store.js";
+import { saveTopCount, TOP_COUNTS, type Resource, type Store } from "./store.js";
 
 export const PAGE_ID = "media-storage";
 
@@ -303,9 +302,18 @@ export class MediaStorageApp {
     if (data.tv.largest) features.append(this.featureCard("Largest series", data.tv.largest, { view: "series", seriesId: data.tv.largest.id }, data.tv.sizeBytes, "tv"));
     if (data.movies.largest) features.append(this.featureCard("Largest movie", data.movies.largest, { view: "movie", movieId: data.movies.largest.id }, data.movies.sizeBytes, "movie"));
     if (features.childElementCount) view.append(features);
+    const prefs = this.store.prefs;
+    const count = h("select", { class: "ms-select__input", "aria-label": "Number of top items" }, ...TOP_COUNTS.map((n) => h("option", { value: String(n) }, `Top ${n}`)));
+    count.value = String(prefs.topCount);
     const ranks = h("div", { class: "ms-ranks" });
-    ranks.append(this.rankList("Top series", data.tv, "tv"), this.rankList("Top movies", data.movies, "movie"));
-    view.append(ranks);
+    const drawRanks = () => ranks.replaceChildren(this.rankList("Top series", data.tv, "tv"), this.rankList("Top movies", data.movies, "movie"));
+    count.addEventListener("change", () => {
+      prefs.topCount = Number(count.value);
+      saveTopCount(prefs.topCount);
+      drawRanks();
+    });
+    drawRanks();
+    view.append(h("div", { class: "ms-ranks__bar" }, h("label", { class: "ms-select" }, h("span", { class: "ms-visually-hidden" }, "Show"), count, icon("chevronDown", "ms-icon ms-select__chev"))), ranks);
     return view;
   }
 
@@ -395,9 +403,9 @@ export class MediaStorageApp {
       wrap.append(this.errorState(totals.status.error, () => void this.store.load(true), true));
       return wrap;
     }
-    const max = totals.top[0]?.sizeBytes ?? 1;
+    const top = totals.top.slice(0, this.store.prefs.topCount);
     const list = h("ol", { class: "ms-rank__list" });
-    totals.top.forEach((item, index) => {
+    top.forEach((item, index) => {
       const route: Route = kind === "tv" ? { view: "series", seriesId: item.id } : { view: "movie", movieId: item.id };
       list.append(
         h(
@@ -408,12 +416,13 @@ export class MediaStorageApp {
             { class: "ms-rank__row" },
             h("span", { class: "ms-rank__n" }, String(index + 1)),
             artwork(item.poster, item.title, "ms-rank__poster"),
-            h("span", { class: "ms-rank__body" }, h("span", { class: "ms-rank__title" }, item.title, item.year ? h("span", { class: "ms-rank__year" }, ` ${item.year}`) : null), shareBar(item.sizeBytes / max, kind === "tv" ? "is-tv" : "is-movies")),
-            sizeBlock(item.sizeBytes, "ms-size ms-size--row"),
+            h("span", { class: "ms-rank__body" }, h("span", { class: "ms-rank__title" }, item.title, item.year ? h("span", { class: "ms-rank__year" }, ` ${item.year}`) : null)),
+            h("span", { class: "ms-rank__size" }, sizeBlock(item.sizeBytes, "ms-size ms-size--row"), sharePct(item.sizeBytes, totals.sizeBytes)),
           ),
         ),
       );
     });
+    if (top.length) wrap.append(stackBar(top, totals.sizeBytes, kind, kind === "tv" ? "TV" : "movies"));
     if (!totals.top.length) list.append(h("li", { class: "ms-empty-line" }, "Nothing on disk yet."));
     const more = this.link(kind === "tv" ? { view: "tv" } : { view: "movies" }, { class: "ms-more" }, kind === "tv" ? "All series" : "All movies", icon("chevronRight"));
     wrap.append(list, more);
@@ -497,7 +506,8 @@ export class MediaStorageApp {
             return b.sizeBytes - a.sizeBytes || byTitle(a, b);
         }
       });
-      const max = items.reduce((m, item) => Math.max(m, item.sizeBytes), 1);
+      // Shares are of the whole library, so they stay fixed while searching.
+      const libraryBytes = items.reduce((sum, item) => sum + item.sizeBytes, 0);
       const totalBytes = filtered.reduce((sum, item) => sum + item.sizeBytes, 0);
       const noun = isTv ? (filtered.length === 1 ? "series" : "series") : filtered.length === 1 ? "movie" : "movies";
       summary.textContent = `${fmtInt(filtered.length)} ${noun}${query ? ` matching “${query}”` : ""} · ${fmtBytes(totalBytes)}`;
@@ -508,7 +518,7 @@ export class MediaStorageApp {
         );
         return;
       }
-      grid.replaceChildren(...filtered.map((item) => (isTv ? this.seriesCard(item as SeriesSummaryT, max) : this.movieCard(item as MovieSummaryT, max))));
+      grid.replaceChildren(...filtered.map((item) => (isTv ? this.seriesCard(item as SeriesSummaryT, libraryBytes) : this.movieCard(item as MovieSummaryT, libraryBytes))));
       if (body.firstChild !== grid) body.replaceChildren(grid);
     };
     const schedule = () => {
@@ -543,7 +553,7 @@ export class MediaStorageApp {
     return view;
   }
 
-  private seriesCard(item: SeriesSummaryT, max: number) {
+  private seriesCard(item: SeriesSummaryT, libraryBytes: number) {
     return h(
       "div",
       { role: "listitem", class: "ms-card-wrap" },
@@ -551,19 +561,18 @@ export class MediaStorageApp {
         { view: "series", seriesId: item.id },
         { class: "ms-card", "aria-label": `${item.title}, ${fmtBytes(item.sizeBytes)}, ${item.seasonCount} seasons, ${item.fileCount} files` },
         h("span", { class: "ms-card__poster" }, artwork(item.poster, item.title, "ms-poster")),
-        shareBar(item.sizeBytes / max, "is-tv ms-card__share"),
         h(
           "span",
           { class: "ms-card__body" },
           h("span", { class: "ms-card__title" }, item.title),
-          h("span", { class: "ms-card__size" }, sizeBlock(item.sizeBytes)),
+          h("span", { class: "ms-card__size" }, sizeBlock(item.sizeBytes), sharePct(item.sizeBytes, libraryBytes)),
           h("span", { class: "ms-card__meta" }, `${item.seasonCount} ${item.seasonCount === 1 ? "season" : "seasons"} · ${fmtInt(item.fileCount)} ${item.fileCount === 1 ? "file" : "files"}`),
         ),
       ),
     );
   }
 
-  private movieCard(item: MovieSummaryT, max: number) {
+  private movieCard(item: MovieSummaryT, libraryBytes: number) {
     const res = resolutionLabel(item.resolution);
     return h(
       "div",
@@ -572,12 +581,11 @@ export class MediaStorageApp {
         { view: "movie", movieId: item.id },
         { class: `ms-card${item.hasFile ? "" : " is-missing-file"}`, "aria-label": `${item.title}${item.year ? ` (${item.year})` : ""}, ${item.hasFile ? fmtBytes(item.sizeBytes) : "no file"}` },
         h("span", { class: "ms-card__poster" }, artwork(item.poster, item.title, "ms-poster"), res ? h("span", { class: "ms-card__badge", "aria-hidden": "true" }, res) : null),
-        shareBar(item.sizeBytes / max, "is-movies ms-card__share"),
         h(
           "span",
           { class: "ms-card__body" },
           h("span", { class: "ms-card__title" }, item.title),
-          h("span", { class: "ms-card__size" }, item.hasFile ? sizeBlock(item.sizeBytes) : h("span", { class: "ms-card__nofile" }, "No file")),
+          h("span", { class: "ms-card__size" }, ...(item.hasFile ? [sizeBlock(item.sizeBytes), sharePct(item.sizeBytes, libraryBytes)] : [h("span", { class: "ms-card__nofile" }, "No file")])),
           h("span", { class: "ms-card__meta" }, item.year ? String(item.year) : "—"),
         ),
       ),
@@ -640,7 +648,6 @@ export class MediaStorageApp {
       view.append(seasonsWrap);
       return view;
     }
-    const max = data.seasons.reduce((m, s) => Math.max(m, s.sizeBytes), 1);
     const grid = h("ol", { class: "ms-seasons" });
     for (const season of data.seasons) {
       const empty = season.fileCount === 0;
@@ -651,9 +658,8 @@ export class MediaStorageApp {
           "span",
           { class: "ms-season__body" },
           h("span", { class: "ms-season__name" }, season.label),
-          h("span", { class: "ms-season__size" }, sizeBlock(season.sizeBytes)),
+          h("span", { class: "ms-season__size" }, sizeBlock(season.sizeBytes), sharePct(season.sizeBytes, data.sizeBytes)),
           h("span", { class: "ms-season__meta" }, meta),
-          shareBar(season.sizeBytes / max, "is-tv"),
         ),
       ];
       grid.append(
@@ -725,10 +731,9 @@ export class MediaStorageApp {
     segmented.append(option("size", "Largest first"), option("episode", "Episode order"));
     const drawFiles = () => {
       if (!data) return;
-      const max = data.files.reduce((m, f) => Math.max(m, f.sizeBytes), 1);
       const files = data.files.slice();
       if (prefs.fileSort === "episode") files.sort((a, b) => (a.episodes[0]?.number ?? 1e9) - (b.episodes[0]?.number ?? 1e9));
-      list.replaceChildren(...files.map((file) => this.fileRow(file, seasonNumber, max)));
+      list.replaceChildren(...files.map((file) => this.fileRow(file, seasonNumber, data.sizeBytes)));
     };
     const section = h("section", { class: "ms-section", "aria-label": "Media files" }, h("div", { class: "ms-section__head" }, h("h3", { class: "ms-h3" }, "Files"), segmented));
     if (!data) {
@@ -743,7 +748,7 @@ export class MediaStorageApp {
     return view;
   }
 
-  private fileRow(file: EpisodeFileT, season: number, max: number) {
+  private fileRow(file: EpisodeFileT, season: number, seasonBytes: number) {
     const spec = file.spec;
     const titles = file.episodes.map((e) => e.title).join(" · ") || "Unknown episode";
     const chips = [resolutionLabel(spec.resolutionClass) ?? spec.resolution, spec.quality, [spec.videoCodec, spec.dynamicRange].filter(Boolean).join(" "), spec.audio, spec.runtime ? fmtDuration(spec.runtimeSeconds) ?? spec.runtime : null].filter((v): v is string => Boolean(v));
@@ -759,7 +764,7 @@ export class MediaStorageApp {
         file.fileName ? h("p", { class: "ms-file__name", title: file.path ?? file.fileName }, file.fileName) : h("p", { class: "ms-file__name is-warn" }, "Sonarr could not read this file record. Size is derived from the season total."),
         chips.length ? h("p", { class: "ms-file__spec" }, ...chips.map((chip) => h("span", null, chip))) : null,
       ),
-      h("div", { class: "ms-file__size" }, sizeBlock(file.sizeBytes, "ms-size ms-size--row"), file.sizeDerived ? h("span", { class: "ms-file__derived" }, "derived") : null, shareBar(file.sizeBytes / max, "is-tv")),
+      h("div", { class: "ms-file__size" }, sizeBlock(file.sizeBytes, "ms-size ms-size--row"), sharePct(file.sizeBytes, seasonBytes), file.sizeDerived ? h("span", { class: "ms-file__derived" }, "derived") : null),
     );
   }
 
@@ -914,5 +919,32 @@ function serviceLink(href: string, service: string) {
     { class: "ms-service-link", href, target: "_blank", rel: "noopener noreferrer", "aria-label": `Open in ${service} (new tab)` },
     `Open in ${service}`,
     icon("external", "ms-icon ms-icon--sm"),
+  );
+}
+
+/** Share of the whole library, as muted text beside a size. */
+function sharePct(bytes: number, total: number) {
+  const pct = total > 0 ? (bytes / total) * 100 : 0;
+  const text = pct === 0 ? "0%" : pct < 0.1 ? "<0.1%" : pct < 1 ? `${pct.toFixed(2)}%` : `${pct.toFixed(1)}%`;
+  return h("span", { class: "ms-pct", title: "Share of library" }, text);
+}
+
+/** One bar per list: a segment for each top item, then everything else. */
+function stackBar(top: { title: string; sizeBytes: number }[], total: number, kind: "tv" | "movie", scope: string) {
+  const topBytes = top.reduce((sum, item) => sum + item.sizeBytes, 0);
+  const pct = (bytes: number) => (total > 0 ? (bytes / total) * 100 : 0);
+  const share = `${pct(topBytes).toFixed(1)}%`;
+  const bar = h("div", { class: "ms-stack__bar", role: "img", "aria-label": `Top ${top.length} use ${share} of ${scope}` });
+  for (const item of top) {
+    const seg = h("span", { class: "ms-stack__seg", title: `${item.title} · ${pct(item.sizeBytes).toFixed(1)}%` });
+    seg.style.width = `${pct(item.sizeBytes).toFixed(3)}%`;
+    bar.append(seg);
+  }
+  return h(
+    "div",
+    { class: `ms-stack is-${kind}` },
+    h("div", { class: "ms-stack__head" }, h("span", null, `Top ${top.length} use `, h("strong", null, share), ` of ${scope}`), h("span", { class: "ms-stack__total" }, `${fmtBytes(topBytes)} of ${fmtBytes(total)}`)),
+    bar,
+    h("div", { class: "ms-stack__legend" }, h("span", null, h("i", { class: "ms-stack__key" }), `Top ${top.length}`), h("span", null, h("i", { class: "ms-stack__key is-rest" }), `Everything else · ${fmtBytes(Math.max(0, total - topBytes))}`)),
   );
 }

@@ -45,7 +45,7 @@ export class Store {
   readonly movieDetail = new Map<number, Resource<MovieDetailT>>();
   refreshing = false;
   /** UI preferences that survive navigation within the page. */
-  readonly prefs = { tvQuery: "", tvSort: "size-desc", movieQuery: "", movieSort: "size-desc", fileSort: "size" as "size" | "episode" };
+  readonly prefs = { tvQuery: "", tvSort: "size-desc", movieQuery: "", movieSort: "size-desc", fileSort: "size" as "size" | "episode", topCount: readTopCount() };
 
   private epoch = 0;
   private disposed = false;
@@ -204,5 +204,26 @@ export class Store {
 
   loadMovie(movieId: number, force = false) {
     return this.detail(this.movieDetail as Map<string | number, Resource<MovieDetailT>>, movieId, "radarr", () => this.client.invoke("movie-detail", { movieId }), force);
+  }
+}
+
+const TOP_COUNT_KEY = "media-storage.topCount";
+export const TOP_COUNTS = [5, 10, 15, 25] as const;
+
+function readTopCount() {
+  try {
+    const saved = Number(localStorage.getItem(TOP_COUNT_KEY));
+    if ((TOP_COUNTS as readonly number[]).includes(saved)) return saved;
+  } catch {
+    // Storage unavailable; use the default.
+  }
+  return 10;
+}
+
+export function saveTopCount(count: number) {
+  try {
+    localStorage.setItem(TOP_COUNT_KEY, String(count));
+  } catch {
+    // Storage unavailable; the choice lasts for this page only.
   }
 }

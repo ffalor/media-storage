@@ -12,7 +12,7 @@ import type {
   ServiceNameT,
   ServiceStatusT,
 } from "../contract.js";
-import { SEASON_FILES_PAGE } from "../contract.js";
+import { SEASON_FILES_PAGE, TOP_MAX } from "../contract.js";
 import { ArrError, mapLimit, toServiceError, TtlCache, type ArrClient } from "./arr.js";
 import type { Artwork } from "./artwork.js";
 
@@ -452,7 +452,7 @@ export function createMediaService(deps: {
           lib.ok || state.state === "error" ? state : { ...state, state: "error", error: lib.error };
         const top = (library?.items ?? [])
           .filter((item) => item.sizeBytes > 0)
-          .slice(0, 10)
+          .slice(0, TOP_MAX)
           .map((item) => ({
             id: item.id,
             title: item.title,

@@ -17,6 +17,9 @@ const OptText = (maxLength = 512) => Type.Union([Type.String({ maxLength }), Typ
 /** Same-origin, signed artwork path served by this plugin. Never contains an API key. */
 const Art = Type.Union([Type.String({ maxLength: 2048, pattern: "^/media-storage/art/" }), Type.Null()]);
 
+/** Most top items the overview returns; the page lets the user show fewer. */
+export const TOP_MAX = 25;
+
 export const ServiceName = Type.Union([Type.Literal("sonarr"), Type.Literal("radarr")]);
 
 export const ServiceError = Type.Object(
@@ -96,7 +99,7 @@ const ServiceTotals = Type.Object(
     itemCount: Count,
     fileCount: Count,
     largest: Type.Union([Ranked, Type.Null()]),
-    top: Type.Array(Ranked, { maxItems: 12 }),
+    top: Type.Array(Ranked, { maxItems: TOP_MAX }),
   },
   { additionalProperties: false },
 );

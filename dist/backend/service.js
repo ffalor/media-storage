@@ -1,4 +1,4 @@
-import { SEASON_FILES_PAGE } from "../contract.js";
+import { SEASON_FILES_PAGE, TOP_MAX } from "../contract.js";
 import { ArrError, mapLimit, toServiceError, TtlCache } from "./arr.js";
 // ---- Helpers -----------------------------------------------------------------------------
 /** Library snapshots older than this are served immediately and rebuilt in the background. */
@@ -273,7 +273,7 @@ export function createMediaService(deps) {
                 const effective = lib.ok || state.state === "error" ? state : { ...state, state: "error", error: lib.error };
                 const top = (library?.items ?? [])
                     .filter((item) => item.sizeBytes > 0)
-                    .slice(0, 10)
+                    .slice(0, TOP_MAX)
                     .map((item) => ({
                     id: item.id,
                     title: item.title,

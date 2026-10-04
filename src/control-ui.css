@@ -91,9 +91,6 @@
 .ms-size--xl { font-size: clamp(28px, 4.4cqi, 40px); letter-spacing: -0.02em; }
 .ms-size--row { font-size: 15px; }
 
-.ms-share { display: block; height: 3px; border-radius: 3px; background: color-mix(in oklab, var(--ms-muted) 18%, transparent); overflow: hidden; }
-.ms-share__fill { display: block; height: 100%; border-radius: inherit; background: var(--ms-tv); }
-.ms-share.is-movies .ms-share__fill { background: var(--ms-movies); }
 
 /* ---- Artwork ------------------------------------------------------------------------------- */
 
@@ -208,7 +205,6 @@
   background: rgb(10 10 12 / 0.72); color: #fff; font-size: 10.5px; font-weight: 650; letter-spacing: 0.03em;
   backdrop-filter: blur(6px);
 }
-.ms-card__share { height: 2px; }
 .ms-card__body { display: grid; gap: 2px; padding: 0 1px; min-width: 0; }
 .ms-card__title { font-weight: 600; color: var(--ms-strong); font-size: 13.5px; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ms-card__size { font-size: 15px; }
@@ -258,7 +254,6 @@ a.ms-season:hover .ms-season__art { transform: translateY(-3px); box-shadow: 0 1
 .ms-season__name { font-weight: 600; color: var(--ms-strong); }
 .ms-season__size { font-size: 15px; }
 .ms-season__meta { grid-column: 1 / -1; color: var(--ms-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
-.ms-season__body .ms-share { grid-column: 1 / -1; margin-top: 4px; }
 .ms-season.is-empty { opacity: 0.55; }
 .ms-season.is-empty .ms-season__art img { filter: grayscale(1); }
 .ms-season.is-skeleton .ms-season__art { box-shadow: none; }
@@ -296,7 +291,6 @@ a.ms-season:hover .ms-season__art { transform: translateY(-3px); box-shadow: 0 1
 .ms-file__spec { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 3px; color: var(--ms-muted); font-size: 12px; }
 .ms-file__spec span + span::before { content: ""; display: inline-block; width: 3px; height: 3px; border-radius: 50%; background: currentColor; opacity: 0.5; margin-right: 12px; vertical-align: middle; translate: 0 -1px; }
 .ms-file__size { display: grid; gap: 6px; justify-items: end; }
-.ms-file__size .ms-share { width: 100%; }
 .ms-file__derived { font-size: 11px; color: var(--warn, #e8b44a); }
 .ms-file.is-skeleton { border-top-color: transparent; }
 
@@ -398,3 +392,21 @@ a.ms-season:hover .ms-season__art { transform: translateY(-3px); box-shadow: 0 1
   .ms-root *, .ms-root *::before, .ms-root *::after { animation: none !important; transition: none !important; }
   .ms-art img { opacity: 1; }
 }
+
+/* Share of library and the overview's stacked top-items bar. */
+.ms-pct { margin-left: 6px; font-size: 11.5px; color: var(--ms-muted); font-variant-numeric: tabular-nums; }
+.ms-rank__size { display: grid; justify-items: end; gap: 2px; }
+.ms-rank__size .ms-pct, .ms-file__size .ms-pct { margin-left: 0; }
+.ms-ranks__bar { display: flex; justify-content: flex-end; align-items: center; gap: 8px; color: var(--ms-muted); font-size: 13px; }
+.ms-stack { --ms-c: var(--ms-tv); display: grid; gap: 8px; padding: 14px 16px; border-radius: var(--ms-radius); background: var(--ms-surface); }
+.ms-stack.is-movie { --ms-c: var(--ms-movies); }
+.ms-stack__head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; color: var(--ms-muted); font-size: 13px; }
+.ms-stack__head strong { color: var(--ms-strong); font-weight: 650; }
+.ms-stack__total { font-size: 12px; font-variant-numeric: tabular-nums; }
+.ms-stack__bar { display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: color-mix(in oklab, var(--ms-muted) 18%, transparent); }
+.ms-stack__seg { height: 100%; background: var(--ms-c); box-shadow: inset -1px 0 0 var(--ms-surface); }
+.ms-stack__seg:nth-child(even) { background: color-mix(in oklab, var(--ms-c) 70%, #000); }
+.ms-stack__legend { display: flex; justify-content: space-between; gap: 12px; font-size: 11.5px; color: var(--ms-muted); }
+.ms-stack__legend span { display: inline-flex; align-items: center; gap: 6px; }
+.ms-stack__key { width: 8px; height: 8px; border-radius: 2px; background: var(--ms-c); }
+.ms-stack__key.is-rest { background: color-mix(in oklab, var(--ms-muted) 30%, transparent); }

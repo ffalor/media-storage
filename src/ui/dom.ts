@@ -166,9 +166,3 @@ export function sizeBlock(bytes: number, cls = "ms-size") {
   return h("span", { class: cls, title: exactBytes(bytes), "data-bytes": String(bytes) }, h("span", { class: `${cls}__value` }, value), h("span", { class: `${cls}__unit` }, unit));
 }
 
-export function shareBar(fraction: number, cls = "") {
-  const pct = Math.max(0, Math.min(1, fraction)) * 100;
-  const bar = h("span", { class: `ms-share ${cls}`, "aria-hidden": "true" }, h("span", { class: "ms-share__fill" }));
-  (bar.firstChild as HTMLElement).style.width = `${pct.toFixed(2)}%`;
-  return bar;
-}
