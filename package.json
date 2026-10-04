@@ -1,0 +1,41 @@
+{
+  "name": "openclaw-plugin-media-storage",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "description": "Read-only Sonarr/Radarr storage analysis with a native OpenClaw Control UI page.",
+  "scripts": {
+    "build": "tsc -p tsconfig.json && openclaw plugins build",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "validate": "openclaw plugins validate --json",
+    "pack": "openclaw plugins pack --json"
+  },
+  "files": [
+    "dist",
+    "openclaw.plugin.json",
+    "README.md"
+  ],
+  "peerDependencies": {
+    "openclaw": ">=2026.9.7"
+  },
+  "dependencies": {
+    "typebox": "^1.3.17"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "openclaw": "2026.9.7",
+    "typescript": "7.0.2"
+  },
+  "openclaw": {
+    "extensions": [
+      "./dist/index.js"
+    ],
+    "controlUi": "./src/control-ui.ts",
+    "compat": {
+      "pluginApi": ">=2026.9.7"
+    },
+    "build": {
+      "openclawVersion": "2026.9.7"
+    }
+  }
+}

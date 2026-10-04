@@ -1,0 +1,142 @@
+{
+  "id": "media-storage",
+  "name": "Media Storage",
+  "description": "Read-only storage analysis for Sonarr and Radarr libraries with a native Control UI page.",
+  "version": "0.1.0",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "sonarr": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "url": {
+            "type": "string",
+            "default": "http://localhost:8989/",
+            "description": "Sonarr base URL."
+          },
+          "apiKey": {
+            "description": "Sonarr API key as a SecretRef (recommended: a protected entry in Settings → Secrets).",
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              },
+              {
+                "type": "object",
+                "required": [
+                  "source",
+                  "id"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "source": {
+                    "type": "string",
+                    "enum": [
+                      "env",
+                      "file",
+                      "exec",
+                      "store"
+                    ]
+                  },
+                  "provider": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_-]{0,63}$"
+                  },
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "radarr": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "url": {
+            "type": "string",
+            "default": "http://localhost:7878/",
+            "description": "Radarr base URL."
+          },
+          "apiKey": {
+            "description": "Radarr API key as a SecretRef (recommended: a protected entry in Settings → Secrets).",
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              },
+              {
+                "type": "object",
+                "required": [
+                  "source",
+                  "id"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "source": {
+                    "type": "string",
+                    "enum": [
+                      "env",
+                      "file",
+                      "exec",
+                      "store"
+                    ]
+                  },
+                  "provider": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_-]{0,63}$"
+                  },
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  },
+  "activation": {
+    "onStartup": true
+  },
+  "uiCapabilities": [
+    "page",
+    "navigation"
+  ],
+  "controlUi": {
+    "entry": "dist/control-ui/dffc25fe388e66c9c17bebfe7358735e2163fe0499d93476f0fa4ecdebab9754/index.js",
+    "styles": [
+      "dist/control-ui/dffc25fe388e66c9c17bebfe7358735e2163fe0499d93476f0fa4ecdebab9754/index.css"
+    ]
+  },
+  "configContracts": {
+    "secretInputs": {
+      "paths": [
+        {
+          "path": "sonarr.apiKey",
+          "expected": "string",
+          "ownerKind": "capability"
+        },
+        {
+          "path": "radarr.apiKey",
+          "expected": "string",
+          "ownerKind": "capability"
+        }
+      ]
+    }
+  },
+  "contracts": {
+    "tools": []
+  }
+}
