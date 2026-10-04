@@ -21,6 +21,17 @@ Built and tested against OpenClaw 2026.9.7.
 
 ## Install
 
+From git:
+
+```sh
+openclaw plugins install git:github.com/ffalor/media-storage@main --accept-capabilities
+openclaw plugins enable media-storage --accept-capabilities
+```
+
+Pin a tag or commit instead of `main` for a fixed version. Then configure the URLs and API keys below.
+
+### From a local archive
+
 ```sh
 npm install
 npm run build
@@ -30,7 +41,7 @@ openclaw plugins enable media-storage --accept-capabilities
 ```
 
 The archive is self-contained (bundled backend and compiled UI), so it can be copied to the Gateway host and
-installed there. Then configure the URLs and API keys below.
+installed there.
 
 ## Configuration
 
