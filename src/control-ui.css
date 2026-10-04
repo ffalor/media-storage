@@ -416,3 +416,22 @@ a.ms-season:hover .ms-season__art { transform: translateY(-3px); box-shadow: 0 1
 .ms-stack__legend span { display: inline-flex; align-items: center; gap: 6px; }
 .ms-stack__key { width: 8px; height: 8px; border-radius: 2px; background: var(--ms-c); }
 .ms-stack__key.is-rest { background: color-mix(in oklab, var(--ms-muted) 30%, transparent); }
+
+/* Tautulli watch stats (only rendered when Tautulli is configured). */
+.ms-watch { font-size: 12px; color: var(--ms-muted); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ms-watch.is-never { color: var(--warn, #e8b44a); }
+.ms-rank__body:has(.ms-watch) { gap: 2px; }
+.ms-why__cell.is-warn dd { color: var(--warn, #e8b44a); }
+.ms-watch-note { margin: 0; }
+.ms-hero__watch { margin-top: 0; }
+.ms-hero__watch .ms-fact { font-size: 13px; }
+.ms-hero__links { display: flex; flex-wrap: wrap; gap: 8px; }
+.ms-h4 { font-size: 12.5px; font-weight: 600; color: var(--ms-muted); margin-bottom: 6px; }
+.ms-watch-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: var(--ms-gap); }
+.ms-watch-block { padding: 14px 16px; border-radius: var(--ms-radius); background: var(--ms-surface); }
+.ms-watch-list { display: grid; }
+.ms-watch-list li { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 7px 0; border-top: 1px solid var(--ms-line); font-size: 13px; }
+.ms-watch-list li:first-child { border-top: 0; }
+.ms-watch-list__main { min-width: 0; color: var(--ms-strong); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ms-watch-list__code { color: var(--ms-muted); font-variant-numeric: tabular-nums; }
+.ms-watch-list__side { flex: none; color: var(--ms-muted); font-size: 12px; font-variant-numeric: tabular-nums; }

@@ -16,7 +16,7 @@ const OptText = (maxLength = 512) => Type.Union([Type.String({ maxLength }), Typ
 const Art = Type.Union([Type.String({ maxLength: 2048, pattern: "^/media-storage/art/" }), Type.Null()]);
 /** Most top items the overview returns; the page lets the user show fewer. */
 export const TOP_MAX = 25;
-export const ServiceName = Type.Union([Type.Literal("sonarr"), Type.Literal("radarr")]);
+export const ServiceName = Type.Union([Type.Literal("sonarr"), Type.Literal("radarr"), Type.Literal("tautulli")]);
 export const ServiceError = Type.Object({
     service: ServiceName,
     code: Type.Union([
@@ -31,6 +31,15 @@ export const ServiceError = Type.Object({
     ]),
     message: Text(400),
 }, { additionalProperties: false });
+/** Days without a play after which a watched item counts as stale. */
+export const STALE_DAYS = 180;
+/** Tautulli play summary for one library item. Null on an item when Tautulli has no match for it. */
+export const Watch = Type.Object({
+    plays: Count,
+    /** ISO time of the most recent play, null if never played. */
+    lastPlayed: OptText(40),
+}, { additionalProperties: false });
+const OptWatch = Type.Union([Watch, Type.Null()]);
 const Failure = Type.Object({ ok: Type.Literal(false), error: ServiceError }, { additionalProperties: false });
 const result = (ok) => Type.Union([ok, Failure]);
 export const ServiceStatus = Type.Object({
@@ -52,6 +61,7 @@ export const SeriesSummary = Type.Object({
     status: Text(32),
     network: OptText(128),
     poster: Art,
+    watch: OptWatch,
 }, { additionalProperties: false });
 export const MovieSummary = Type.Object({
     id: Id,
@@ -64,8 +74,9 @@ export const MovieSummary = Type.Object({
     resolution: Type.Integer({ minimum: 0, maximum: 10000 }),
     videoCodec: OptText(64),
     poster: Art,
+    watch: OptWatch,
 }, { additionalProperties: false });
-const Ranked = Type.Object({ id: Id, title: Text(), year: Type.Integer({ minimum: 0, maximum: 3000 }), sizeBytes: Bytes, poster: Art, backdrop: Art }, { additionalProperties: false });
+const Ranked = Type.Object({ id: Id, title: Text(), year: Type.Integer({ minimum: 0, maximum: 3000 }), sizeBytes: Bytes, poster: Art, backdrop: Art, watch: OptWatch }, { additionalProperties: false });
 const ServiceTotals = Type.Object({
     status: ServiceStatus,
     sizeBytes: Bytes,
@@ -73,6 +84,33 @@ const ServiceTotals = Type.Object({
     fileCount: Count,
     largest: Type.Union([Ranked, Type.Null()]),
     top: Type.Array(Ranked, { maxItems: TOP_MAX }),
+}, { additionalProperties: false });
+const UnwatchedBucket = Type.Object({ count: Count, sizeBytes: Bytes }, { additionalProperties: false });
+const WatchTotals = Type.Object({
+    /** Items with files on disk that matched a Tautulli library item. */
+    matched: Count,
+    /** Items with files on disk that have no Tautulli match (their watch state is unknown). */
+    unmatched: Count,
+    neverWatched: UnwatchedBucket,
+    /** Watched before, but not in the last STALE_DAYS days. */
+    stale: UnwatchedBucket,
+    /** Most played in the last 30 days, from Tautulli's home stats. */
+    popular: Type.Array(Type.Object({
+        /** Sonarr series id / Radarr movie id, null when the title is not in Sonarr/Radarr. */
+        id: Type.Union([Id, Type.Null()]),
+        title: Text(),
+        plays: Count,
+        users: Count,
+        lastPlayed: OptText(40),
+        sizeBytes: Type.Union([Bytes, Type.Null()]),
+        poster: Art,
+    }, { additionalProperties: false }), { maxItems: 10 }),
+}, { additionalProperties: false });
+export const WatchOverview = Type.Object({
+    status: Type.Object({ state: Type.Union([Type.Literal("ok"), Type.Literal("error")]), version: OptText(64), error: Type.Union([ServiceError, Type.Null()]) }, { additionalProperties: false }),
+    staleDays: Count,
+    tv: Type.Union([WatchTotals, Type.Null()]),
+    movies: Type.Union([WatchTotals, Type.Null()]),
 }, { additionalProperties: false });
 export const Overview = Type.Object({
     ok: Type.Literal(true),
@@ -82,6 +120,8 @@ export const Overview = Type.Object({
     combinedBytes: Bytes,
     /** False when one service was unavailable and the combined total only covers the other. */
     complete: Type.Boolean(),
+    /** Tautulli watch stats; null when Tautulli is not configured. */
+    watch: Type.Union([WatchOverview, Type.Null()]),
 }, { additionalProperties: false });
 const PageInput = Type.Object({
     offset: Type.Integer({ minimum: 0, maximum: 1_000_000 }),
@@ -206,6 +246,27 @@ export const MovieDetail = Type.Object({
         Type.Null(),
     ]),
 }, { additionalProperties: false });
+const WatchWindow = Type.Object({ days: Count, plays: Count, seconds: Count }, { additionalProperties: false });
+export const WatchDetail = Type.Object({
+    ok: Type.Literal(true),
+    /** not_configured: Tautulli is not set up. unmatched: no Tautulli item for this title. */
+    state: Type.Union([Type.Literal("ok"), Type.Literal("not_configured"), Type.Literal("unmatched")]),
+    webUrl: OptText(2048),
+    plays: Count,
+    seconds: Count,
+    /** 1, 7 and 30 days, then all time (days 0). */
+    windows: Type.Array(WatchWindow, { maxItems: 4 }),
+    users: Type.Array(Type.Object({ name: Text(128), plays: Count, seconds: Count }, { additionalProperties: false }), { maxItems: 10 }),
+    seasons: Type.Array(Type.Object({ seasonNumber: Type.Integer({ minimum: 0, maximum: 10000 }), plays: Count, lastPlayed: OptText(40) }, { additionalProperties: false }), { maxItems: 200 }),
+    recent: Type.Array(Type.Object({
+        at: Text(40),
+        user: Text(128),
+        title: Text(),
+        season: Type.Union([Type.Integer({ minimum: 0, maximum: 10000 }), Type.Null()]),
+        episode: Type.Union([Type.Integer({ minimum: 0, maximum: 100000 }), Type.Null()]),
+        percent: Type.Integer({ minimum: 0, maximum: 100 }),
+    }, { additionalProperties: false }), { maxItems: 10 }),
+}, { additionalProperties: false });
 export const contract = defineFeatureContract({
     pluginId: "media-storage",
     operations: {
@@ -248,6 +309,12 @@ export const contract = defineFeatureContract({
             description: "Radarr movie metadata and its media file.",
             input: Type.Object({ movieId: Id }, { additionalProperties: false }),
             output: result(MovieDetail),
+        },
+        "watch-detail": {
+            kind: "query",
+            description: "Tautulli watch stats for one series or movie. Not configured or unmatched items return an empty result, not an error.",
+            input: Type.Object({ kind: Type.Union([Type.Literal("series"), Type.Literal("movie")]), id: Id }, { additionalProperties: false }),
+            output: result(WatchDetail),
         },
     },
     events: {

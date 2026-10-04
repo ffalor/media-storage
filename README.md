@@ -8,7 +8,10 @@ Control UI, showing how much storage your Sonarr and Radarr libraries use, down 
 - **Overview:** total, TV and movie storage, file counts, the largest series and movie, and the top consumers.
 - **TV:** poster grid with search and sorting, then series → seasons (including Specials) → individual files.
 - **Movies:** poster grid with search and sorting, then a detail view explaining each file's size.
-- Live data from the Sonarr/Radarr APIs; nothing is written to either service.
+- **Watch stats (optional):** with Tautulli configured, play counts and last-watched dates beside sizes, storage
+  that was never watched or not watched in 6 months, the most-watched titles, and per-title plays, watch time,
+  top viewers and recent plays.
+- Live data from the Sonarr/Radarr/Tautulli APIs; nothing is written to any of them.
 
 Built and tested against OpenClaw 2026.9.7.
 
@@ -53,6 +56,8 @@ Config lives under `plugins.entries.media-storage.config`.
 | `sonarr.apiKey` | secret `SONARR_API_KEY` | SecretRef (see below) |
 | `radarr.url` | `http://localhost:7878/` | Radarr base URL |
 | `radarr.apiKey` | secret `RADARR_API_KEY` | SecretRef (see below) |
+| `tautulli.url` | `http://localhost:8181/` | Tautulli base URL (optional) |
+| `tautulli.apiKey` | unset | SecretRef; watch stats are hidden while unset |
 
 The API keys are SecretRefs (`configContracts.secretInputs`): config holds only a reference, Settings redacts it,
 and the plugin reads the resolved key per request without keeping it.
@@ -72,6 +77,19 @@ so nothing else is needed. To use differently named secrets, change the `id` in 
 ```sh
 openclaw config set plugins.entries.media-storage.config.sonarr.apiKey --ref-source store --ref-provider default --ref-id MY_SONARR_KEY
 ```
+
+### Tautulli watch stats (optional)
+
+Add a protected secret `TAUTULLI_API_KEY` (Tautulli → Settings → Web Interface → API), then:
+
+```sh
+openclaw config set plugins.entries.media-storage.config.tautulli.url http://tautulli.local:8181/
+openclaw config set plugins.entries.media-storage.config.tautulli.apiKey --ref-source store --ref-provider default --ref-id TAUTULLI_API_KEY
+```
+
+Titles are matched to Plex items by title and year. Unmatched titles show no watch stats and are left out of the
+"never watched" totals. If Tautulli is unreachable, its status dot turns red and storage data is unaffected.
+Watch data is cached for 10 minutes (detail views for 2) and refreshed by the Refresh button.
 
 Config changes hot-reload the plugin and re-resolve its secrets. If you add or change a secret's value without
 changing config, apply it with `openclaw secrets reload`.
@@ -109,7 +127,7 @@ list in one request. On a library of ~150 series and ~380 movies it takes about 
 
 ## Security
 
-- **Read-only:** every operation is a query requiring `operator.read`. Nothing modifies Sonarr, Radarr or files.
+- **Read-only:** every operation is a query requiring `operator.read`. Nothing modifies Sonarr, Radarr, Tautulli or files.
 - **Keys stay server-side:** the browser talks only to the plugin's typed operations. API keys are used by the
   Gateway backend and never appear in responses, logs, image URLs or the browser bundle.
 - **Artwork:** served from `/media-storage/art/v1/<payload>.<signature>`. The HMAC signature means the browser can

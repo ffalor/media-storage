@@ -83,6 +83,25 @@ export function fmtRelative(iso, now = Date.now()) {
         return `${hours} hr ago`;
     return new Date(iso).toLocaleDateString();
 }
+/** Coarse age for watch history: "today", "3d ago", "5mo ago", "2y ago". */
+export function fmtAgo(iso, now = Date.now()) {
+    if (!iso)
+        return "";
+    const days = Math.floor(Math.max(0, now - Date.parse(iso)) / 86_400_000);
+    if (days < 1)
+        return "today";
+    if (days < 60)
+        return `${days}d ago`;
+    if (days < 730)
+        return `${Math.floor(days / 30.44)}mo ago`;
+    return `${Math.floor(days / 365.25)}y ago`;
+}
+/** Watch time in hours or minutes ("312 hr", "45 min"). */
+export function fmtWatchTime(seconds) {
+    if (!seconds)
+        return "0 min";
+    return seconds >= 3600 ? `${fmtInt(Math.round(seconds / 3600))} hr` : `${Math.max(1, Math.round(seconds / 60))} min`;
+}
 export function fmtDate(iso) {
     if (!iso)
         return null;

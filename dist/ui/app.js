@@ -1,4 +1,4 @@
-import { artwork, bytesParts, episodeCode, exactBytes, fmtBitrate, fmtBytes, fmtDate, fmtDuration, fmtInt, fmtRelative, h, icon, resolutionLabel, sizeBlock, } from "./dom.js";
+import { artwork, bytesParts, episodeCode, exactBytes, fmtBitrate, fmtBytes, fmtAgo, fmtDate, fmtDuration, fmtInt, fmtRelative, fmtWatchTime, h, icon, resolutionLabel, sizeBlock, } from "./dom.js";
 import { saveTopCount, TOP_COUNT_MAX, TOP_COUNTS } from "./store.js";
 export const PAGE_ID = "media-storage";
 const positive = (value) => {
@@ -111,14 +111,18 @@ export class MediaStorageApp {
         if (this.store.overview.status === "idle")
             void this.store.load();
         const route = this.route;
-        if (route.view === "series")
+        if (route.view === "series") {
             void this.store.loadSeries(route.seriesId);
+            void this.store.loadWatch("series", route.seriesId);
+        }
         if (route.view === "season") {
             void this.store.loadSeries(route.seriesId);
             void this.store.loadSeason(route.seriesId, route.season);
         }
-        if (route.view === "movie")
+        if (route.view === "movie") {
             void this.store.loadMovie(route.movieId);
+            void this.store.loadWatch("movie", route.movieId);
+        }
     }
     go(route) {
         this.host.navigation.openPage({ id: PAGE_ID, params: routeParams(route) });
@@ -196,13 +200,13 @@ export class MediaStorageApp {
         const refreshing = this.store.refreshing || overview.status === "loading";
         const refresh = h("button", { class: `ms-btn ms-btn--quiet${refreshing ? " is-busy" : ""}`, type: "button", "aria-label": "Refresh from Sonarr and Radarr", disabled: refreshing }, icon("refresh"), h("span", { class: "ms-btn__label" }, refreshing ? "Refreshing" : "Refresh"));
         refresh.addEventListener("click", () => void this.store.load(true));
-        this.header.replaceChildren(h("div", { class: "ms-header__row" }, h("div", { class: "ms-brand" }, h("h1", { class: "ms-brand__title" }, "Media Storage")), h("div", { class: "ms-header__status" }, h("span", { class: "ms-svcs" }, service("Sonarr", data?.tv.status), service("Radarr", data?.movies.status)), h("span", { class: "ms-updated", "data-ms-updated": "", "aria-live": "polite" }, data ? `Updated ${fmtRelative(data.retrievedAt)}` : ""), refresh)), h("nav", { class: "ms-tabs", "aria-label": "Media Storage sections" }, tab("overview", "Overview", { view: "overview" }), tab("tv", "TV", { view: "tv" }), tab("movies", "Movies", { view: "movies" })));
+        this.header.replaceChildren(h("div", { class: "ms-header__row" }, h("div", { class: "ms-brand" }, h("h1", { class: "ms-brand__title" }, "Media Storage")), h("div", { class: "ms-header__status" }, h("span", { class: "ms-svcs" }, service("Sonarr", data?.tv.status), service("Radarr", data?.movies.status), data?.watch ? service("Tautulli", { ...data.watch.status, healthIssues: 0 }) : null), h("span", { class: "ms-updated", "data-ms-updated": "", "aria-live": "polite" }, data ? `Updated ${fmtRelative(data.retrievedAt)}` : ""), refresh)), h("nav", { class: "ms-tabs", "aria-label": "Media Storage sections" }, tab("overview", "Overview", { view: "overview" }), tab("tv", "TV", { view: "tv" }), tab("movies", "Movies", { view: "movies" })));
     }
     heading(text, cls = "ms-h2") {
         return h("h2", { class: cls, tabindex: "-1", "data-ms-heading": "" }, text);
     }
     errorState(error, retry, compact = false) {
-        const name = error.service === "sonarr" ? "Sonarr" : "Radarr";
+        const name = { sonarr: "Sonarr", radarr: "Radarr", tautulli: "Tautulli" }[error.service];
         const title = error.code === "not_found"
             ? "Not found"
             : error.code === "unauthorized"
@@ -235,6 +239,9 @@ export class MediaStorageApp {
             features.append(this.featureCard("Largest movie", data.movies.largest, { view: "movie", movieId: data.movies.largest.id }, data.movies.sizeBytes, "movie"));
         if (features.childElementCount)
             view.append(features);
+        // Watch stats appear only when Tautulli is configured and answering; its failures show in the header only.
+        if (data.watch?.status.state === "ok")
+            view.append(this.watchOverview(data.watch, data));
         const ranks = h("div", { class: "ms-ranks" });
         const drawRanks = () => ranks.replaceChildren(this.rankList("Top series", data.tv, "tv"), this.rankList("Top movies", data.movies, "movie", control));
         const control = this.topCountControl(drawRanks);
@@ -294,7 +301,7 @@ export class MediaStorageApp {
             .filter((item) => item.sizeBytes > 0)
             .sort((a, b) => b.sizeBytes - a.sizeBytes)
             .slice(0, n)
-            .map((item) => ({ id: item.id, title: item.title, year: item.year, sizeBytes: item.sizeBytes, poster: item.poster }));
+            .map((item) => ({ id: item.id, title: item.title, year: item.year, sizeBytes: item.sizeBytes, poster: item.poster, watch: item.watch }));
     }
     overviewHero(data) {
         const total = bytesParts(data.combinedBytes);
@@ -331,7 +338,7 @@ export class MediaStorageApp {
         const list = h("ol", { class: "ms-rank__list" });
         top.forEach((item, index) => {
             const route = kind === "tv" ? { view: "series", seriesId: item.id } : { view: "movie", movieId: item.id };
-            list.append(h("li", null, this.link(route, { class: "ms-rank__row" }, h("span", { class: "ms-rank__n" }, String(index + 1)), artwork(item.poster, item.title, "ms-rank__poster"), h("span", { class: "ms-rank__body" }, h("span", { class: "ms-rank__title" }, item.title, item.year ? h("span", { class: "ms-rank__year" }, ` ${item.year}`) : null)), h("span", { class: "ms-rank__size" }, sizeBlock(item.sizeBytes, "ms-size ms-size--row"), sharePct(item.sizeBytes, totals.sizeBytes)))));
+            list.append(h("li", null, this.link(route, { class: "ms-rank__row" }, h("span", { class: "ms-rank__n" }, String(index + 1)), artwork(item.poster, item.title, "ms-rank__poster"), h("span", { class: "ms-rank__body" }, h("span", { class: "ms-rank__title" }, item.title, item.year ? h("span", { class: "ms-rank__year" }, ` ${item.year}`) : null), watchLine(item.watch)), h("span", { class: "ms-rank__size" }, sizeBlock(item.sizeBytes, "ms-size ms-size--row"), sharePct(item.sizeBytes, totals.sizeBytes)))));
         });
         if (top.length)
             wrap.append(stackBar(top, totals.sizeBytes, kind, kind === "tv" ? "TV" : "movies"));
@@ -340,6 +347,36 @@ export class MediaStorageApp {
         const more = this.link(kind === "tv" ? { view: "tv" } : { view: "movies" }, { class: "ms-more" }, kind === "tv" ? "All series" : "All movies", icon("chevronRight"));
         wrap.append(list, more);
         return wrap;
+    }
+    /** Storage that nobody watches, and what is being watched, from Tautulli. */
+    watchOverview(watch, data) {
+        const sum = (pick) => (watch.tv ? pick(watch.tv) : 0) + (watch.movies ? pick(watch.movies) : 0);
+        const neverBytes = sum((t) => t.neverWatched.sizeBytes);
+        const staleBytes = sum((t) => t.stale.sizeBytes);
+        const counts = (pick) => [watch.tv ? `${fmtInt(pick(watch.tv))} series` : null, watch.movies ? `${fmtInt(pick(watch.movies))} ${pick(watch.movies) === 1 ? "movie" : "movies"}` : null].filter(Boolean).join(" · ");
+        const months = Math.round(watch.staleDays / 30);
+        const cell = (label, bytes, note, warn = false) => h("div", { class: `ms-why__cell${warn ? " is-warn" : ""}` }, h("dt", null, label), h("dd", { title: exactBytes(bytes) }, fmtBytes(bytes), h("span", { class: "ms-why__note" }, note)));
+        const idle = data.combinedBytes ? ((neverBytes + staleBytes) / data.combinedBytes) * 100 : 0;
+        const unmatched = sum((t) => t.unmatched);
+        const popular = (title, rows, kind) => {
+            if (!rows)
+                return null;
+            const list = h("ol", { class: "ms-rank__list" });
+            rows.forEach((row, index) => {
+                const content = [
+                    h("span", { class: "ms-rank__n" }, String(index + 1)),
+                    artwork(row.poster, row.title, "ms-rank__poster"),
+                    h("span", { class: "ms-rank__body" }, h("span", { class: "ms-rank__title" }, row.title), h("span", { class: "ms-watch" }, `${fmtInt(row.plays)} ${row.plays === 1 ? "play" : "plays"} · ${fmtInt(row.users)} ${row.users === 1 ? "user" : "users"}${row.lastPlayed ? ` · ${fmtAgo(row.lastPlayed)}` : ""}`)),
+                    h("span", { class: "ms-rank__size" }, row.sizeBytes !== null ? sizeBlock(row.sizeBytes, "ms-size ms-size--row") : h("span", { class: "ms-pct" }, "Not in library")),
+                ];
+                const route = row.id === null ? null : kind === "tv" ? { view: "series", seriesId: row.id } : { view: "movie", movieId: row.id };
+                list.append(h("li", null, route ? this.link(route, { class: "ms-rank__row" }, ...content) : h("div", { class: "ms-rank__row" }, ...content)));
+            });
+            if (!rows.length)
+                list.append(h("li", { class: "ms-empty-line" }, "Nothing played in the last 30 days."));
+            return h("section", { class: "ms-rank" }, h("div", { class: "ms-rank__head" }, h("h3", { class: "ms-h3" }, title)), list);
+        };
+        return h("section", { class: "ms-section ms-watch-overview", "aria-labelledby": "ms-watch-h" }, h("div", { class: "ms-section__head" }, h("h3", { class: "ms-h3", id: "ms-watch-h" }, "Watch activity"), h("span", { class: "ms-pct" }, `From Tautulli${watch.status.version ? ` ${watch.status.version}` : ""}`)), h("dl", { class: "ms-why" }, cell("Never watched", neverBytes, counts((t) => t.neverWatched.count), true), cell(`Not watched in ${months} months`, staleBytes, counts((t) => t.stale.count)), h("div", { class: "ms-why__cell" }, h("dt", null, "Idle share of storage"), h("dd", null, `${idle.toFixed(1)}%`, h("span", { class: "ms-why__note" }, `never watched or idle ${months}+ months`)))), unmatched ? h("p", { class: "ms-pct ms-watch-note" }, `${fmtInt(unmatched)} ${unmatched === 1 ? "item" : "items"} with files could not be matched to Plex and are not counted.`) : null, h("div", { class: "ms-ranks" }, popular("Most watched series · 30 days", watch.tv?.popular, "tv"), popular("Most watched movies · 30 days", watch.movies?.popular, "movie")));
     }
     overviewSkeleton() {
         return h("div", { class: "ms-skel-overview", "aria-busy": "true", "aria-label": "Loading storage overview" }, h("div", { class: "ms-hero-total" }, h("div", null, h("span", { class: "ms-skel ms-skel--eyebrow" }), h("span", { class: "ms-skel ms-skel--total" })), h("div", null, h("span", { class: "ms-skel ms-skel--bar" }), h("span", { class: "ms-skel ms-skel--line" })), h("div", { class: "ms-stats" }, ...Array.from({ length: 4 }, () => h("span", { class: "ms-skel ms-skel--stat" })))), h("div", { class: "ms-features" }, h("span", { class: "ms-skel ms-skel--feature" }), h("span", { class: "ms-skel ms-skel--feature" })));
@@ -485,6 +522,7 @@ export class MediaStorageApp {
         const summary = this.findSeries(seriesId);
         const data = "data" in res ? res.data : undefined;
         const title = data?.title ?? summary?.title ?? "Series";
+        const watch = this.watchFor("series", seriesId);
         const view = h("article", { class: "ms-detail" });
         view.append(this.crumbs(["TV", { view: "tv" }], [title, null]));
         view.append(this.hero({
@@ -495,7 +533,8 @@ export class MediaStorageApp {
             sizeBytes: data?.sizeBytes ?? summary?.sizeBytes ?? null,
             facts: data ? [[fmtInt(data.seasonCount), data.seasonCount === 1 ? "season" : "seasons"], [fmtInt(data.fileCount), data.fileCount === 1 ? "file" : "files"]] : summary ? [[fmtInt(summary.seasonCount), "seasons"], [fmtInt(summary.fileCount), "files"]] : [],
             overview: data?.overview ?? null,
-            link: data?.webUrl ? { href: data.webUrl, service: "Sonarr" } : null,
+            links: [data?.webUrl ? { href: data.webUrl, service: "Sonarr" } : null, watch?.webUrl ? { href: watch.webUrl, service: "Tautulli" } : null],
+            watch,
             kind: "tv",
         }));
         if (res.status === "error") {
@@ -509,12 +548,14 @@ export class MediaStorageApp {
             return view;
         }
         const grid = h("ol", { class: "ms-seasons" });
+        const seasonWatch = new Map(watch?.seasons.map((s) => [s.seasonNumber, s]));
         for (const season of data.seasons) {
             const empty = season.fileCount === 0;
+            const played = watch ? seasonWatch.get(season.seasonNumber) : undefined;
             const meta = empty ? `Nothing on disk · ${season.totalEpisodes} ${season.totalEpisodes === 1 ? "episode" : "episodes"}` : `${fmtInt(season.fileCount)} ${season.fileCount === 1 ? "file" : "files"} · ${season.episodeFileCount}/${season.totalEpisodes} episodes`;
             const content = [
                 artwork(season.artwork ?? data.backdrop, `${season.label} artwork`, "ms-season__art", { fallback: season.seasonNumber === 0 ? "SP" : String(season.seasonNumber) }),
-                h("span", { class: "ms-season__body" }, h("span", { class: "ms-season__name" }, season.label), h("span", { class: "ms-season__size" }, sizeBlock(season.sizeBytes), sharePct(season.sizeBytes, data.sizeBytes)), h("span", { class: "ms-season__meta" }, meta)),
+                h("span", { class: "ms-season__body" }, h("span", { class: "ms-season__name" }, season.label), h("span", { class: "ms-season__size" }, sizeBlock(season.sizeBytes), sharePct(season.sizeBytes, data.sizeBytes)), h("span", { class: "ms-season__meta" }, meta), watch && !empty ? watchLine(played ? { plays: played.plays, lastPlayed: played.lastPlayed } : { plays: 0, lastPlayed: null }, "ms-season__meta") : null),
             ];
             grid.append(h("li", null, empty
                 ? h("div", { class: "ms-season is-empty", "aria-label": `${season.label}: nothing on disk` }, ...content)
@@ -522,6 +563,8 @@ export class MediaStorageApp {
         }
         seasonsWrap.append(grid);
         view.append(seasonsWrap);
+        if (watch)
+            view.append(this.watchSection(watch, "series"));
         return view;
     }
     seasonView(seriesId, seasonNumber) {
@@ -597,6 +640,7 @@ export class MediaStorageApp {
         const summary = this.findMovie(movieId);
         const data = "data" in res ? res.data : undefined;
         const title = data?.title ?? summary?.title ?? "Movie";
+        const watch = this.watchFor("movie", movieId);
         const view = h("article", { class: "ms-detail" });
         view.append(this.crumbs(["Movies", { view: "movies" }], [title, null]));
         const spec = data?.file?.spec;
@@ -610,7 +654,8 @@ export class MediaStorageApp {
             sizeBytes: data ? (data.hasFile ? data.sizeBytes : null) : (summary?.sizeBytes ?? null),
             facts: spec ? [[resolutionLabel(spec.resolutionClass) ?? spec.resolution ?? "—", spec.quality ?? ""], [spec.videoCodec ?? "—", spec.dynamicRange ?? "video"]] : [],
             overview: data?.overview ?? null,
-            link: data?.webUrl ? { href: data.webUrl, service: "Radarr" } : null,
+            links: [data?.webUrl ? { href: data.webUrl, service: "Radarr" } : null, watch?.webUrl ? { href: watch.webUrl, service: "Tautulli" } : null],
+            watch,
             kind: "movie",
         }));
         if (res.status === "error") {
@@ -625,7 +670,10 @@ export class MediaStorageApp {
             view.append(h("div", { class: "ms-state" }, icon("film", "ms-state__icon"), h("div", { class: "ms-state__body" }, h("p", { class: "ms-state__title" }, "No file on disk"), h("p", { class: "ms-state__text" }, "Radarr is tracking this movie but has no media file for it, so it uses no storage."))));
             return view;
         }
-        view.append(this.whySection(data.file.sizeBytes, data.file.spec, data.runtimeMinutes), this.specSection(data.file));
+        view.append(this.whySection(data.file.sizeBytes, data.file.spec, data.runtimeMinutes));
+        if (watch)
+            view.append(this.watchSection(watch, "movie"));
+        view.append(this.specSection(data.file));
         return view;
     }
     /** Explain the footprint: bytes over runtime is the average bitrate actually spent. */
@@ -643,7 +691,38 @@ export class MediaStorageApp {
     }
     // ---- Shared ------------------------------------------------------------------------------
     hero(opts) {
-        return h("header", { class: `ms-hero is-${opts.kind}` }, h("div", { class: "ms-hero__backdrop" }, artwork(opts.backdrop, "", "ms-hero__img", { eager: true, fallback: "" }), h("span", { class: "ms-hero__scrim", "aria-hidden": "true" })), h("div", { class: "ms-hero__content" }, artwork(opts.poster, opts.title, "ms-hero__poster", { eager: true }), h("div", { class: "ms-hero__text" }, h("h2", { class: "ms-h1", tabindex: "-1", "data-ms-heading": "" }, opts.title), h("p", { class: "ms-hero__meta" }, opts.meta.filter(Boolean).join(" · ")), h("div", { class: "ms-hero__figures" }, opts.sizeBytes !== null ? sizeBlock(opts.sizeBytes, "ms-size ms-size--xl") : h("span", { class: "ms-skel ms-skel--size" }), ...opts.facts.map(([value, label]) => h("span", { class: "ms-fact" }, h("strong", null, value), label ? ` ${label}` : ""))), opts.overview ? h("p", { class: "ms-hero__overview" }, opts.overview) : null, opts.link ? serviceLink(opts.link.href, opts.link.service) : null)));
+        const watch = opts.watch;
+        const last = watch?.recent[0];
+        const watchFacts = watch
+            ? [
+                [fmtInt(watch.plays), watch.plays === 1 ? "play" : "plays"],
+                ...(watch.seconds ? [[fmtWatchTime(watch.seconds), "watched"]] : []),
+                ...(last ? [[fmtAgo(last.at), `last, by ${last.user}`]] : watch.plays === 0 ? [["Never", "watched"]] : []),
+            ]
+            : [];
+        const links = opts.links.filter((link) => link !== null);
+        return h("header", { class: `ms-hero is-${opts.kind}` }, h("div", { class: "ms-hero__backdrop" }, artwork(opts.backdrop, "", "ms-hero__img", { eager: true, fallback: "" }), h("span", { class: "ms-hero__scrim", "aria-hidden": "true" })), h("div", { class: "ms-hero__content" }, artwork(opts.poster, opts.title, "ms-hero__poster", { eager: true }), h("div", { class: "ms-hero__text" }, h("h2", { class: "ms-h1", tabindex: "-1", "data-ms-heading": "" }, opts.title), h("p", { class: "ms-hero__meta" }, opts.meta.filter(Boolean).join(" · ")), h("div", { class: "ms-hero__figures" }, opts.sizeBytes !== null ? sizeBlock(opts.sizeBytes, "ms-size ms-size--xl") : h("span", { class: "ms-skel ms-skel--size" }), ...opts.facts.map(([value, label]) => h("span", { class: "ms-fact" }, h("strong", null, value), label ? ` ${label}` : ""))), watchFacts.length ? h("div", { class: "ms-hero__figures ms-hero__watch", "aria-label": "Watch stats from Tautulli" }, ...watchFacts.map(([value, label]) => h("span", { class: "ms-fact" }, h("strong", null, value), ` ${label}`))) : null, opts.overview ? h("p", { class: "ms-hero__overview" }, opts.overview) : null, links.length ? h("div", { class: "ms-hero__links" }, ...links.map((link) => serviceLink(link.href, link.service))) : null)));
+    }
+    /** Matched Tautulli stats for an item, or null while loading, unconfigured, unmatched, or failing. */
+    watchFor(kind, id) {
+        const res = this.store.watchDetail.get(`${kind}:${id}`);
+        const data = res && "data" in res ? res.data : undefined;
+        return data?.state === "ok" ? data : null;
+    }
+    watchSection(watch, kind) {
+        const label = (days) => (days === 0 ? "All time" : days === 1 ? "Last 24 hours" : `Last ${days} days`);
+        const plays = (n) => `${fmtInt(n)} ${n === 1 ? "play" : "plays"}`;
+        const windows = h("dl", { class: "ms-why" }, ...watch.windows.map((w) => h("div", { class: "ms-why__cell" }, h("dt", null, label(w.days)), h("dd", null, plays(w.plays), h("span", { class: "ms-why__note" }, fmtWatchTime(w.seconds))))));
+        const row = (main, side, title = "") => h("li", null, h("span", { class: "ms-watch-list__main" }, ...main), h("span", { class: "ms-watch-list__side", title }, side));
+        const block = (heading, items) => items.length ? h("div", { class: "ms-watch-block" }, h("h4", { class: "ms-h4" }, heading), h("ol", { class: "ms-watch-list" }, ...items)) : null;
+        const users = block("Top viewers", watch.users.slice(0, 5).map((u) => row([u.name], `${plays(u.plays)} · ${fmtWatchTime(u.seconds)}`)));
+        const recent = block("Recent plays", watch.recent.map((r) => {
+            const code = r.season !== null && r.episode !== null ? h("span", { class: "ms-watch-list__code" }, `${episodeCode(r.season, [{ number: r.episode }])} `) : null;
+            const side = [kind === "series" ? r.user : null, `${r.percent}%`, fmtAgo(r.at)].filter(Boolean).join(" · ");
+            return row([code, kind === "series" ? r.title : r.user], side, fmtDate(r.at) ?? "");
+        }));
+        const never = h("div", { class: "ms-state is-compact" }, icon(kind === "series" ? "tv" : "film", "ms-state__icon"), h("div", { class: "ms-state__body" }, h("p", { class: "ms-state__title" }, "Never watched"), h("p", { class: "ms-state__text" }, "Tautulli has no plays recorded for this title.")));
+        return h("section", { class: "ms-section", "aria-labelledby": "ms-watchd-h" }, h("div", { class: "ms-section__head" }, h("h3", { class: "ms-h3", id: "ms-watchd-h" }, "Watch activity"), h("span", { class: "ms-pct" }, "From Tautulli")), watch.plays === 0 ? never : windows, users || recent ? h("div", { class: "ms-watch-grid" }, users, recent) : null);
     }
     findSeries(id) {
         const res = this.store.series;
@@ -660,6 +739,14 @@ function cap(value) {
 /** Opens the item's page in the Sonarr/Radarr web UI in a new tab. */
 function serviceLink(href, service) {
     return h("a", { class: "ms-service-link", href, target: "_blank", rel: "noopener noreferrer", "aria-label": `Open in ${service} (new tab)` }, `Open in ${service}`, icon("external", "ms-icon ms-icon--sm"));
+}
+/** "42 plays · 3d ago", or a warning-tinted "Never watched". Nothing when Tautulli has no match. */
+function watchLine(watch, cls = "ms-watch") {
+    if (!watch)
+        return null;
+    if (!watch.plays)
+        return h("span", { class: `${cls} ms-watch is-never` }, "Never watched");
+    return h("span", { class: `${cls} ms-watch`, title: fmtDate(watch.lastPlayed) ?? "" }, `${fmtInt(watch.plays)} ${watch.plays === 1 ? "play" : "plays"}${watch.lastPlayed ? ` · ${fmtAgo(watch.lastPlayed)}` : ""}`);
 }
 /** Share of the whole library, as muted text beside a size. */
 function sharePct(bytes, total) {

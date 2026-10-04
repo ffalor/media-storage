@@ -19,7 +19,7 @@ export function toServiceError(service, error) {
         return error.toJSON();
     return { service, code: "upstream_error", message: `${label(service)} request failed unexpectedly.` };
 }
-export const label = (service) => (service === "sonarr" ? "Sonarr" : "Radarr");
+export const label = (service) => ({ sonarr: "Sonarr", radarr: "Radarr", tautulli: "Tautulli" })[service];
 /** `getApiKey` is called per request so the key is never retained beyond the current invocation. */
 export function createArrClient(service, baseUrl, getApiKey) {
     const base = new URL(baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`);

@@ -2,7 +2,7 @@
   "id": "media-storage",
   "name": "Media Storage",
   "description": "Read-only storage analysis for Sonarr and Radarr libraries with a native Control UI page.",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
@@ -86,6 +86,46 @@
             }
           }
         }
+      },
+      "tautulli": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "url": {
+            "type": "string",
+            "default": "http://localhost:8181/",
+            "description": "Tautulli base URL."
+          },
+          "apiKey": {
+            "description": "Tautulli API key as a SecretRef (for example a protected entry in Settings → Secrets).",
+            "type": "object",
+            "required": [
+              "source",
+              "id"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "source": {
+                "type": "string",
+                "enum": [
+                  "env",
+                  "file",
+                  "exec",
+                  "store"
+                ]
+              },
+              "provider": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_-]{0,63}$"
+              },
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              }
+            }
+          }
+        }
       }
     }
   },
@@ -97,6 +137,10 @@
     "radarr": {
       "label": "Radarr",
       "help": "Connection to Radarr (movies)."
+    },
+    "tautulli": {
+      "label": "Tautulli (optional)",
+      "help": "Connection to Tautulli for watch stats. Leave the API key unset to hide watch stats."
     },
     "sonarr.url": {
       "label": "Sonarr URL",
@@ -115,6 +159,15 @@
     "radarr.apiKey": {
       "label": "Radarr API key secret",
       "help": "Which secret in Settings → Secrets holds the Radarr API key. Set automatically to RADARR_API_KEY; to use a differently named secret, change only the \"id\" value. Find the key in Radarr under Settings → General → Security."
+    },
+    "tautulli.url": {
+      "label": "Tautulli URL",
+      "help": "Address of your Tautulli server as seen from the Gateway, for example http://tautulli.local:8181/.",
+      "placeholder": "http://localhost:8181/"
+    },
+    "tautulli.apiKey": {
+      "label": "Tautulli API key secret",
+      "help": "Optional. A SecretRef to the secret holding the Tautulli API key, for example { \"source\": \"store\", \"provider\": \"default\", \"id\": \"TAUTULLI_API_KEY\" }. Find the key in Tautulli under Settings → Web Interface → API."
     }
   },
   "activation": {
@@ -125,9 +178,9 @@
     "navigation"
   ],
   "controlUi": {
-    "entry": "dist/control-ui/d1e9fa03e15156bc8ce3bf41a0ef9aa046992d045c2426e7b2da501c54df4a74/index.js",
+    "entry": "dist/control-ui/e22217347dd1cd2f9f5f3e5498466e51f966a1c89b97ec0af4075d771002117c/index.js",
     "styles": [
-      "dist/control-ui/d1e9fa03e15156bc8ce3bf41a0ef9aa046992d045c2426e7b2da501c54df4a74/index.css"
+      "dist/control-ui/e22217347dd1cd2f9f5f3e5498466e51f966a1c89b97ec0af4075d771002117c/index.css"
     ]
   },
   "configContracts": {
@@ -140,6 +193,11 @@
         },
         {
           "path": "radarr.apiKey",
+          "expected": "string",
+          "ownerKind": "capability"
+        },
+        {
+          "path": "tautulli.apiKey",
           "expected": "string",
           "ownerKind": "capability"
         }

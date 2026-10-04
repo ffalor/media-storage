@@ -22,6 +22,8 @@ export class Store {
     seriesDetail = new Map();
     seasonFiles = new Map();
     movieDetail = new Map();
+    /** Tautulli stats keyed by "series:<id>" / "movie:<id>". */
+    watchDetail = new Map();
     refreshing = false;
     /** UI preferences that survive navigation within the page. */
     prefs = { tvQuery: "", tvSort: "size-desc", movieQuery: "", movieSort: "size-desc", fileSort: "size", topCount: readTopCount() };
@@ -70,6 +72,7 @@ export class Store {
             this.seriesDetail.clear();
             this.seasonFiles.clear();
             this.movieDetail.clear();
+            this.watchDetail.clear();
         }
         this.overview = { status: "loading", data: "data" in this.overview ? this.overview.data : undefined };
         if (this.series.status !== "ready" || refresh)
@@ -177,6 +180,9 @@ export class Store {
             }
             return { ...first, files };
         }, force);
+    }
+    loadWatch(kind, id, force = false) {
+        return this.detail(this.watchDetail, `${kind}:${id}`, "tautulli", () => this.client.invoke("watch-detail", { kind, id }), force);
     }
     loadMovie(movieId, force = false) {
         return this.detail(this.movieDetail, movieId, "radarr", () => this.client.invoke("movie-detail", { movieId }), force);

@@ -32,6 +32,7 @@ const service = (name: string, defaultUrl: string) =>
 
 export const DEFAULT_SONARR_URL = "http://localhost:8989/";
 export const DEFAULT_RADARR_URL = "http://localhost:7878/";
+export const DEFAULT_TAUTULLI_URL = "http://localhost:8181/";
 
 /** References written into config on first start when no `apiKey` is set. */
 export const DEFAULT_KEY_REFS = {
@@ -45,6 +46,8 @@ export const CONFIG_JSON_SCHEMA = {
   properties: {
     sonarr: service("Sonarr", DEFAULT_SONARR_URL),
     radarr: service("Radarr", DEFAULT_RADARR_URL),
+    // Optional: watch stats are shown only when tautulli.apiKey resolves. No default key reference is seeded.
+    tautulli: service("Tautulli", DEFAULT_TAUTULLI_URL),
   },
 };
 
@@ -59,8 +62,9 @@ function httpUrl(value: unknown, fallback: string) {
 }
 
 /** Read the service URL from plugin config. API keys are not read here; see `getPreparedPluginSecretInput`. */
-export function resolveServiceUrl(config: Record<string, unknown> | undefined, name: "sonarr" | "radarr"): string {
+export function resolveServiceUrl(config: Record<string, unknown> | undefined, name: "sonarr" | "radarr" | "tautulli"): string {
   const section = config?.[name];
   const record = section && typeof section === "object" ? (section as Record<string, unknown>) : {};
-  return httpUrl(record.url, name === "sonarr" ? DEFAULT_SONARR_URL : DEFAULT_RADARR_URL);
+  const fallback = { sonarr: DEFAULT_SONARR_URL, radarr: DEFAULT_RADARR_URL, tautulli: DEFAULT_TAUTULLI_URL }[name];
+  return httpUrl(record.url, fallback);
 }

@@ -15,6 +15,7 @@ import type {
 import { SEASON_FILES_PAGE, TOP_MAX } from "../contract.js";
 import { ArrError, mapLimit, toServiceError, TtlCache, type ArrClient } from "./arr.js";
 import type { Artwork } from "./artwork.js";
+import { toWatch, type WatchService } from "./tautulli.js";
 
 // ---- Minimal upstream shapes (Sonarr v4 / Radarr v6 API v3) --------------------------------
 
@@ -231,6 +232,8 @@ export function createMediaService(deps: {
   sonarr: ArrClient;
   radarr: ArrClient;
   art: Artwork;
+  /** Optional Tautulli watch stats. */
+  watch?: WatchService;
   logger?: MediaServiceLogger;
   /** Called after a background rebuild replaces a library snapshot. */
   onLibraryUpdated?: (update: LibraryUpdate) => void;
@@ -298,6 +301,7 @@ export function createMediaService(deps: {
             status: str(entry.status, 32) ?? "unknown",
             network: str(entry.network, 128),
             poster: art.cover("sonarr", image(entry.images, "poster"), "poster-500"),
+            watch: null,
           };
         });
         items.sort((a, b) => b.sizeBytes - a.sizeBytes || a.title.localeCompare(b.title));
@@ -329,6 +333,7 @@ export function createMediaService(deps: {
             resolution: int(file?.quality?.quality?.resolution),
             videoCodec: str(file?.mediaInfo?.videoCodec, 64),
             poster: art.cover("radarr", image(movie.images, "poster"), "poster-500"),
+            watch: null,
           };
         });
         items.sort((a, b) => b.sizeBytes - a.sizeBytes || a.title.localeCompare(b.title));
@@ -351,6 +356,14 @@ export function createMediaService(deps: {
   );
   const tvLibrary = (force = false) => tvSnapshot.get(force);
   const movieLibrary = (force = false) => movieSnapshot.get(force);
+
+  /** Attach Tautulli play counts to library items. Watch data is looked up per read so it refreshes independently. */
+  async function withWatch<T extends { title: string; year: number; watch: unknown }>(kind: "tv" | "movies", items: T[]): Promise<T[]> {
+    const index = await deps.watch?.index();
+    if (!index) return items;
+    const lookup = index[kind];
+    return items.map((item) => ({ ...item, watch: toWatch(lookup(item.title, item.year)) }));
+  }
 
   function status(client: ArrClient, force: boolean): Promise<ServiceStatusT> {
     return cache.get(
@@ -430,7 +443,7 @@ export function createMediaService(deps: {
 
     async overview(refresh: boolean): Promise<OverviewT> {
       if (refresh) cache.clear();
-      const [sonarrStatus, radarrStatus, tv, movies] = await Promise.all([
+      const [sonarrStatus, radarrStatus, tv, movies, index] = await Promise.all([
         status(sonarr, refresh),
         status(radarr, refresh),
         tvLibrary(refresh).then(
@@ -441,11 +454,14 @@ export function createMediaService(deps: {
           (value) => ({ ok: true as const, value }),
           (error: unknown) => fail("radarr", error),
         ),
+        // Load the Tautulli index alongside the libraries; failures resolve to null.
+        deps.watch?.index(refresh) ?? Promise.resolve(null),
       ]);
       const totals = (
         state: ServiceStatusT,
         lib: { ok: true; value: TvLibrary | MovieLibrary } | Failure,
         countFiles: boolean,
+        kind: "tv" | "movies",
       ) => {
         const library = lib.ok ? lib.value : null;
         const effective: ServiceStatusT =
@@ -460,6 +476,7 @@ export function createMediaService(deps: {
             sizeBytes: item.sizeBytes,
             poster: item.poster,
             backdrop: library?.backdrops.get(item.id) ?? null,
+            watch: index ? toWatch(index[kind](item.title, item.year)) : null,
           }));
         return {
           status: effective,
@@ -470,8 +487,12 @@ export function createMediaService(deps: {
           top,
         };
       };
-      const tvTotals = totals(sonarrStatus, tv, true);
-      const movieTotals = totals(radarrStatus, movies, true);
+      const tvTotals = totals(sonarrStatus, tv, true, "tv");
+      const movieTotals = totals(radarrStatus, movies, true, "movies");
+      // Reuses the index loaded above; reports Tautulli's own failure without affecting storage data.
+      const watch = deps.watch
+        ? await deps.watch.overview({ tv: tv.ok ? tv.value.items : null, movies: movies.ok ? movies.value.items : null })
+        : null;
       // Report the age of the oldest snapshot shown, not the time of this request.
       const stamps = [tv, movies].flatMap((lib) => (lib.ok ? [lib.value.retrievedAt] : []));
       return {
@@ -481,6 +502,7 @@ export function createMediaService(deps: {
         movies: movieTotals,
         combinedBytes: tvTotals.sizeBytes + movieTotals.sizeBytes,
         complete: tv.ok && movies.ok,
+        watch,
       };
     },
 
@@ -496,7 +518,7 @@ export function createMediaService(deps: {
           retrievedAt: library.retrievedAt,
           total: library.items.length,
           offset: input.offset,
-          items: library.items.slice(input.offset, input.offset + input.limit),
+          items: await withWatch("tv", library.items.slice(input.offset, input.offset + input.limit)),
         };
       } catch (error) {
         return fail("sonarr", error);
@@ -515,7 +537,7 @@ export function createMediaService(deps: {
           retrievedAt: library.retrievedAt,
           total: library.items.length,
           offset: input.offset,
-          items: library.items.slice(input.offset, input.offset + input.limit),
+          items: await withWatch("movies", library.items.slice(input.offset, input.offset + input.limit)),
         };
       } catch (error) {
         return fail("radarr", error);
@@ -638,6 +660,22 @@ export function createMediaService(deps: {
       }
     },
 
+    async watchDetail(kind: "series" | "movie", id: number) {
+      try {
+        if (!deps.watch?.configured()) return notConfigured();
+        // Match on the Sonarr/Radarr title: from the snapshot when present, otherwise the item itself.
+        const library = kind === "series" ? await tvLibrary() : await movieLibrary();
+        let item: { title: string; year: number } | undefined = library.items.find((entry) => entry.id === id);
+        if (!item) {
+          const raw = kind === "series" ? await sonarr.json<SonarrSeries>(`/series/${id}`) : await radarr.json<RadarrMovie>(`/movie/${id}`);
+          item = { title: str(raw.title) ?? "", year: int(raw.year) };
+        }
+        return await deps.watch.detail(kind, item);
+      } catch (error) {
+        return fail(error instanceof ArrError ? error.service : "tautulli", error);
+      }
+    },
+
     async movieDetail(movieId: number): Promise<({ ok: true } & MovieDetailT) | Failure> {
       try {
         const movie = await cache.get(`movies:movie:${movieId}`, DETAIL_TTL, () => radarr.json<RadarrMovie>(`/movie/${movieId}`));
@@ -678,5 +716,7 @@ export function createMediaService(deps: {
     },
   };
 }
+
+const notConfigured = () => ({ ok: true as const, state: "not_configured" as const, webUrl: null, plays: 0, seconds: 0, windows: [], users: [], seasons: [], recent: [] });
 
 export type MediaService = ReturnType<typeof createMediaService>;

@@ -22,7 +22,7 @@ export function toServiceError(service: ServiceNameT, error: unknown): ServiceEr
   return { service, code: "upstream_error", message: `${label(service)} request failed unexpectedly.` };
 }
 
-export const label = (service: ServiceNameT) => (service === "sonarr" ? "Sonarr" : "Radarr");
+export const label = (service: ServiceNameT) => ({ sonarr: "Sonarr", radarr: "Radarr", tautulli: "Tautulli" })[service];
 
 export type ArrClient = {
   readonly service: ServiceNameT;

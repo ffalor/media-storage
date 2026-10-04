@@ -7,6 +7,7 @@ import { CONFIG_JSON_SCHEMA, DEFAULT_KEY_REFS, resolveServiceUrl } from "./confi
 import { createArrClient } from "./backend/arr.js";
 import { ART_ROUTE, Artwork } from "./backend/artwork.js";
 import { createMediaService } from "./backend/service.js";
+import { createTautulliClient, createWatchService } from "./backend/tautulli.js";
 
 const PLUGIN_ID = "media-storage";
 
@@ -17,14 +18,16 @@ const entry = defineFeaturePlugin({
   setup(api, events) {
     // API keys are read from the prepared secrets snapshot on every request and never retained,
     // so a reload or failed secret makes them unavailable immediately. They never enter logs or responses.
-    const apiKey = (service: "sonarr" | "radarr") => () => getPreparedPluginSecretInput(PLUGIN_ID, `${service}.apiKey`).value;
+    const apiKey = (service: "sonarr" | "radarr" | "tautulli") => () => getPreparedPluginSecretInput(PLUGIN_ID, `${service}.apiKey`).value;
     const sonarr = createArrClient("sonarr", resolveServiceUrl(api.pluginConfig, "sonarr"), apiKey("sonarr"));
     const radarr = createArrClient("radarr", resolveServiceUrl(api.pluginConfig, "radarr"), apiKey("radarr"));
+    const tautulli = createTautulliClient(resolveServiceUrl(api.pluginConfig, "tautulli"), apiKey("tautulli"));
     const art = new Artwork({ sonarr, radarr });
     const media = createMediaService({
       sonarr,
       radarr,
       art,
+      watch: createWatchService(tautulli),
       logger: api.logger,
       onLibraryUpdated: (update) => {
         try {
@@ -80,6 +83,7 @@ const entry = defineFeaturePlugin({
       "season-files": ({ seriesId, seasonNumber, offset }) => media.seasonFiles(seriesId, seasonNumber, offset ?? 0),
       movies: (input) => media.moviesPage({ ...input, limit: clampLimit(input.limit) }),
       "movie-detail": ({ movieId }) => media.movieDetail(movieId),
+      "watch-detail": ({ kind, id }) => media.watchDetail(kind, id),
     };
   },
 });

@@ -9,6 +9,8 @@ import {
   type SeriesDetailT,
   type SeriesSummaryT,
   type ServiceErrorT,
+  type ServiceNameT,
+  type WatchDetailT,
 } from "../contract.js";
 
 export type Resource<T> =
@@ -22,7 +24,7 @@ type Client = FeatureClient<typeof contract>;
 const DETAIL_TTL = 3 * 60_000;
 
 /** Turn transport failures into a displayable error without leaking internals. */
-function transportError(service: "sonarr" | "radarr", error: unknown): ServiceErrorT {
+function transportError(service: ServiceNameT, error: unknown): ServiceErrorT {
   const text = error instanceof Error ? error.message : "";
   const offline = /disconnect|not connected|closed/i.test(text);
   return {
@@ -43,6 +45,8 @@ export class Store {
   readonly seriesDetail = new Map<number, Resource<SeriesDetailT>>();
   readonly seasonFiles = new Map<string, Resource<SeasonFilesT>>();
   readonly movieDetail = new Map<number, Resource<MovieDetailT>>();
+  /** Tautulli stats keyed by "series:<id>" / "movie:<id>". */
+  readonly watchDetail = new Map<string, Resource<WatchDetailT>>();
   refreshing = false;
   /** UI preferences that survive navigation within the page. */
   readonly prefs = { tvQuery: "", tvSort: "size-desc", movieQuery: "", movieSort: "size-desc", fileSort: "size" as "size" | "episode", topCount: readTopCount() };
@@ -93,6 +97,7 @@ export class Store {
       this.seriesDetail.clear();
       this.seasonFiles.clear();
       this.movieDetail.clear();
+      this.watchDetail.clear();
     }
     this.overview = { status: "loading", data: "data" in this.overview ? this.overview.data : undefined };
     if (this.series.status !== "ready" || refresh) this.series = { status: "loading", data: "data" in this.series ? this.series.data : undefined };
@@ -157,7 +162,7 @@ export class Store {
   private async detail<T>(
     map: Map<string | number, Resource<T>>,
     key: string | number,
-    service: "sonarr" | "radarr",
+    service: ServiceNameT,
     fetcher: () => Promise<{ ok: true } & T | { ok: false; error: ServiceErrorT }>,
     force: boolean,
   ) {
@@ -200,6 +205,10 @@ export class Store {
       },
       force,
     );
+  }
+
+  loadWatch(kind: "series" | "movie", id: number, force = false) {
+    return this.detail(this.watchDetail as Map<string | number, Resource<WatchDetailT>>, `${kind}:${id}`, "tautulli", () => this.client.invoke("watch-detail", { kind, id }), force);
   }
 
   loadMovie(movieId: number, force = false) {
