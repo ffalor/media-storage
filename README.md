@@ -24,7 +24,7 @@ Built and tested against OpenClaw 2026.9.7.
 From git:
 
 ```sh
-openclaw plugins install git:github.com/ffalor/media-storage@main --accept-capabilities
+openclaw plugins install git:github.com/ffalor/media-storage@main --accept-capabilities --force
 openclaw plugins enable media-storage --accept-capabilities
 ```
 
@@ -36,7 +36,7 @@ Pin a tag or commit instead of `main` for a fixed version. Then configure the UR
 npm install
 npm run build
 npx openclaw plugins pack --root . --out ./media-storage.tgz --json
-openclaw plugins install ./media-storage.tgz --accept-capabilities
+openclaw plugins install ./media-storage.tgz --accept-capabilities --force
 openclaw plugins enable media-storage --accept-capabilities
 ```
 
