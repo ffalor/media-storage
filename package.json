@@ -12,6 +12,7 @@
   },
   "files": [
     "dist",
+    "assets",
     "openclaw.plugin.json",
     "README.md"
   ],
